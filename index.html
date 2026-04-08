@@ -137,7 +137,7 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
     <div style="font-size:48px;margin-bottom:8px">&#x2705;</div>
     <div style="font-size:17px;font-weight:900;color:#FFD000;margin-bottom:6px;text-transform:uppercase">Cadastro Realizado!</div>
     <div id="reg-success-name" style="background:rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:20px;font-size:15px;font-weight:800;text-transform:uppercase"></div>
-    <button class="btn-primary" onclick="goToApp()">Completar Cadastro &#x2192;</button>
+    <button type="button" class="btn-primary" onclick="goToApp()">Completar Cadastro &#x2192;</button>
   </div>
 
   <!-- LOGIN -->
@@ -152,11 +152,11 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
     <label class="auth-label">Senha *</label>
     <div class="pw-wrap">
       <input type="password" id="login-senha" class="auth-input" placeholder="******"/>
-      <button class="pw-toggle" onclick="togglePw('login-senha',this)">ver</button>
+      <button type="button" class="pw-toggle" onclick="togglePw('login-senha',this)">ver</button>
     </div>
     <div id="login-err" class="err-msg" style="display:none"></div>
-    <button class="btn-primary" onclick="handleLogin()">Entrar &#x2192;</button>
-    <button class="btn-link" onclick="showTab('register')">N&#xE3;o tem conta? Cadastre-se</button>
+    <button type="button" class="btn-primary" onclick="handleLogin()">Entrar &#x2192;</button>
+    <button type="button" class="btn-link" onclick="showTab('register')">N&#xE3;o tem conta? Cadastre-se</button>
   </div>
 
   <!-- REGISTER -->
@@ -174,16 +174,16 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
     <label class="auth-label">Senha *</label>
     <div class="pw-wrap">
       <input type="password" id="reg-senha" class="auth-input" placeholder="M&#xED;nimo 6 caracteres"/>
-      <button class="pw-toggle" onclick="togglePw('reg-senha',this)">ver</button>
+      <button type="button" class="pw-toggle" onclick="togglePw('reg-senha',this)">ver</button>
     </div>
     <label class="auth-label">Confirmar Senha *</label>
     <div class="pw-wrap" style="margin-bottom:16px">
       <input type="password" id="reg-confirma" class="auth-input" placeholder="Repita a senha"/>
-      <button class="pw-toggle" onclick="togglePw('reg-confirma',this)">ver</button>
+      <button type="button" class="pw-toggle" onclick="togglePw('reg-confirma',this)">ver</button>
     </div>
     <div id="reg-err" class="err-msg" style="display:none"></div>
-    <button class="btn-primary" onclick="handleRegister()">Salvar Cadastro</button>
-    <button class="btn-link" onclick="showTab('login')">J&#xE1; tem conta? Fazer Login</button>
+    <button type="button" class="btn-primary" onclick="handleRegister()">Salvar Cadastro</button>
+    <button type="button" class="btn-link" onclick="showTab('login')">J&#xE1; tem conta? Fazer Login</button>
   </div>
 </div>
 
@@ -197,17 +197,17 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
       <div id="hdr-welcome" class="hdr-sub" style="display:none"></div>
     </div>
     <div class="hdr-right">
-      <button class="btn-sair" onclick="handleLogout()">SAIR</button>
-      <button class="btn-cart" onclick="setView('cart')">
+      <button type="button" class="btn-sair" onclick="handleLogout()">SAIR</button>
+      <button type="button" class="btn-cart" onclick="setView('cart')">
         &#x1F6D2;<span id="cart-badge" class="cart-badge" style="display:none">0</span>
       </button>
     </div>
   </header>
   <nav id="main-nav">
-    <button class="nav-btn active" data-view="client" onclick="setView('client')">Dados</button>
-    <button class="nav-btn" data-view="catalog" onclick="setView('catalog')">Cat&#xE1;logo</button>
-    <button class="nav-btn" data-view="cart" onclick="setView('cart')">Pedido</button>
-    <button class="nav-btn" data-view="history" onclick="setView('history')">Hist&#xF3;rico</button>
+    <button type="button" class="nav-btn active" data-view="client" onclick="setView('client')">Dados</button>
+    <button type="button" class="nav-btn" data-view="catalog" onclick="setView('catalog')">Cat&#xE1;logo</button>
+    <button type="button" class="nav-btn" data-view="cart" onclick="setView('cart')">Pedido</button>
+    <button type="button" class="nav-btn" data-view="history" onclick="setView('history')">Hist&#xF3;rico</button>
   </nav>
   <main id="main-content"></main>
   <div id="sticky-bar" class="sticky-bar" style="display:none">
@@ -218,7 +218,7 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
         <div style="font-size:15px;font-weight:800;color:#FFD000" id="sticky-total"></div>
       </div>
     </div>
-    <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="setView('cart')">Ver Pedido &#x2192;</button>
+    <button type="button" class="btn-primary" style="width:auto;padding:9px 18px" onclick="setView('cart')">Ver Pedido &#x2192;</button>
   </div>
   <footer>
     <img id="footer-logo" style="width:20px;height:20px;border-radius:3px;object-fit:cover"/>
@@ -657,7 +657,7 @@ mc.innerHTML=’<h2 style="font-size:22px;font-weight:800;text-align:center;marg
 ‘<div class="row">’+fi(””,“E-mail *”,“email”,“contato@farmacia.com”,“email”,2)+fi(””,“E-mail XML *”,“emailXml”,“nfe@farmacia.com”,“email”,2)+’</div>’+
 ‘<div class="row">’+fi(””,“Telefone”,“telefone”,”(00) 0000-0000”,“tel”)+fi(””,“Celular *”,“celular”,”(00) 00000-0000”,“tel”)+’</div></div>’+
 addrForm()+pgtoForm()+
-‘<button class="btn-primary" onclick="saveCl('client')">💾 Salvar e Continuar →</button>’;
+‘<button type="button" class="btn-primary" onclick="saveCl('client')">💾 Salvar e Continuar →</button>’;
 }
 
 function renderClient(mc){
@@ -670,7 +670,7 @@ mc.innerHTML=’<h2 style="font-size:22px;font-weight:800;text-align:center;marg
 ‘<div class="row">’+fi(””,“E-mail *”,“email”,“contato@farmacia.com”,“email”,2)+fi(””,“E-mail XML *”,“emailXml”,“nfe@farmacia.com”,“email”,2)+’</div>’+
 ‘<div class="row">’+fi(””,“Telefone”,“telefone”,”(00) 0000-0000”,“tel”)+fi(””,“Celular”,“celular”,”(00) 00000-0000”,“tel”)+’</div></div>’+
 addrForm()+pgtoForm()+
-‘<button class="btn-primary" onclick="saveCl('catalog')">💾 Salvar e Ir ao Cat\u00e1logo →</button>’;
+‘<button type="button" class="btn-primary" onclick="saveCl('catalog')">💾 Salvar e Ir ao Cat\u00e1logo →</button>’;
 }
 
 async function saveCl(nextView){
@@ -729,13 +729,13 @@ var list=products.filter(function(p){
 var q=STATE.search.toLowerCase();
 return(p.name.toLowerCase().indexOf(q)>=0||p.brand.toLowerCase().indexOf(q)>=0)&&(STATE.brand===“Todas”||p.brand===STATE.brand);
 });
-var brandsHtml=brands.map(function(b){return ‘<button class=“brand-btn’+(STATE.brand===b?” active”:””)+’” onclick=“setBrand(’’+b+’’)”>’+b+’</button>’;}).join(””);
+var brandsHtml=brands.map(function(b){return ‘<button type=“button” class=“brand-btn’+(STATE.brand===b?” active”:””)+’” onclick=“setBrand(’’+b+’’)”>’+b+’</button>’;}).join(””);
 var cardsHtml=list.map(function(p){
 var qty=STATE.qtys[p.id]!==undefined?STATE.qtys[p.id]:1;
 var inCart=STATE.cart[p.id];
 var bot=inCart?
-‘<div class="qty-ctrl"><button class="qty-btn" onclick="setQ('+p.id+','+Math.max(1,qty-1)+')">−</button><span class="qty-num">’+qty+’</span><button class="qty-btn" onclick="setQ('+p.id+','+(qty+1)+')">+</button></div>’:
-‘<button class="btn-add" onclick="addCart('+p.id+')">+ Adicionar</button>’;
+‘<div class="qty-ctrl"><button type="button" class="qty-btn" onclick="setQ('+p.id+','+Math.max(1,qty-1)+')">−</button><span class="qty-num">’+qty+’</span><button type="button" class="qty-btn" onclick="setQ('+p.id+','+(qty+1)+')">+</button></div>’:
+‘<button type="button" class="btn-add" onclick="addCart('+p.id+')">+ Adicionar</button>’;
 return ‘<div class="prod-card">’+
 ‘<div class="prod-img">’+p.img+’</div>’+
 ‘<div class="prod-brand">’+p.brand+’</div>’+
@@ -769,9 +769,9 @@ return ‘<div class="cart-item">’+
 ‘<div class="ci-img">’+it.img+’</div>’+
 ‘<div class="ci-info"><div class="ci-name">’+it.name+’</div><div class="ci-unit">’+it.unit+’</div></div>’+
 ‘<div class="ci-right">’+
-‘<div class="qty-ctrl"><button class="qty-btn" onclick="setQ('+it.id+','+Math.max(1,qty-1)+')">−</button><span class="qty-num">’+qty+’</span><button class="qty-btn" onclick="setQ('+it.id+','+(qty+1)+')">+</button></div>’+
+‘<div class="qty-ctrl"><button type="button" class="qty-btn" onclick="setQ('+it.id+','+Math.max(1,qty-1)+')">−</button><span class="qty-num">’+qty+’</span><button type="button" class="qty-btn" onclick="setQ('+it.id+','+(qty+1)+')">+</button></div>’+
 ‘<div class="ci-total">R$ ‘+fmt(it.qty*it.price)+’</div>’+
-‘<button class="btn-rem" onclick="remCart('+it.id+')">× remover</button>’+
+‘<button type="button" class="btn-rem" onclick="remCart('+it.id+')">× remover</button>’+
 ‘</div></div>’;
 }).join(””);
 var warnHtml=!isRequired()?’<div class="warn">⚠ Preencha os Dados do Cliente primeiro</div>’:’’;
@@ -780,7 +780,7 @@ itemsHtml+
 ‘<div class="cart-summary">’+
 ‘<div class="cart-total"><span>Total</span><span>R$ ‘+fmt(total)+’</span></div>’+
 warnHtml+
-‘<button class="btn-primary" style="opacity:'+(isRequired()?1:0.5)+';" onclick="handleOrder()">Confirmar Pedido →</button>’+
+‘<button type="button" class="btn-primary" style="opacity:'+(isRequired()?1:0.5)+';" onclick="handleOrder()">Confirmar Pedido →</button>’+
 ‘</div>’;
 }
 
@@ -823,8 +823,8 @@ mc.innerHTML=’<div class="conf-wrap"><div class="conf-box">’+
 ‘<div class="conf-dets"><div style="font-size:11px;font-weight:700;color:#FFD000;text-align:center;margin-bottom:8px;text-transform:uppercase">Itens</div>’+itemRows+
 ‘<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.15)"><span style="font-weight:700">TOTAL</span><span style="color:#FFD000;font-weight:800;font-size:14px">R$ ‘+fmt(total)+’</span></div></div>’+
 ‘<div style="display:flex;flex-direction:column;gap:9px">’+
-‘<button class="btn-primary" style="background:#FFD000;color:#1340b0" onclick="sendEmail()">Enviar por E-mail</button>’+
-‘<button class="btn-primary" onclick="setView('catalog')">Fazer Novo Pedido</button>’+
+‘<button type="button" class="btn-primary" style="background:#FFD000;color:#1340b0" onclick="sendEmail()">Enviar por E-mail</button>’+
+‘<button type="button" class="btn-primary" onclick="setView('catalog')">Fazer Novo Pedido</button>’+
 ‘</div></div></div>’;
 }
 
@@ -862,4 +862,4 @@ document.getElementById(“sticky-logo”).src=LOGO;
 </script>
 
 </body>
-</html>
+</html> brigo de novo
