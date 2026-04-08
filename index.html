@@ -5,80 +5,68 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#1a56db"/>
-  <title>Start Zero – Portal de Pedidos</title>
-  <!-- React -->
+  <title>Start Zero</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <!-- Babel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script>
-    // Initialize Firebase BEFORE React app loads
-    const firebaseConfig = {
+    firebase.initializeApp({
       apiKey: "AIzaSyBR66UYXRE1n8YWUi8H5IMaHp4JEf7tqtE",
       authDomain: "start-zero-a8af0.firebaseapp.com",
       projectId: "start-zero-a8af0",
       storageBucket: "start-zero-a8af0.firebasestorage.app",
       messagingSenderId: "871661353541",
       appId: "1:871661353541:web:2c12adde73b761ddb6012c"
-    };
-    firebase.initializeApp(firebaseConfig);
+    });
     const db = firebase.firestore();
 
 ```
-// Firebase helper functions (replaces sbGet/sbPost/sbPatch)
 async function sbGet(table, filters) {
   try {
-    let ref = db.collection(table);
+    var ref = db.collection(table);
     if(filters) {
-      if(filters.includes("email=eq.")) {
-        const val = decodeURIComponent(filters.split("email=eq.")[1].split("&")[0]);
+      if(filters.indexOf("email=eq.")>=0) {
+        var val = decodeURIComponent(filters.split("email=eq.")[1].split("&")[0]);
         ref = ref.where("email","==",val);
-      } else if(filters.includes("celular=eq.")) {
-        const val = decodeURIComponent(filters.split("celular=eq.")[1].split("&")[0]);
+      } else if(filters.indexOf("celular=eq.")>=0) {
+        var val = decodeURIComponent(filters.split("celular=eq.")[1].split("&")[0]);
         ref = ref.where("celular","==",val);
-      } else if(filters.includes("cnpj=eq.")) {
-        const val = decodeURIComponent(filters.split("cnpj=eq.")[1].split("&")[0]);
+      } else if(filters.indexOf("cnpj=eq.")>=0) {
+        var val = decodeURIComponent(filters.split("cnpj=eq.")[1].split("&")[0]);
         ref = ref.where("cnpj","==",val);
-      } else if(filters.includes("cliente_id=eq.")) {
-        const val = filters.split("cliente_id=eq.")[1].split("&")[0];
+      } else if(filters.indexOf("cliente_id=eq.")>=0) {
+        var val = filters.split("cliente_id=eq.")[1].split("&")[0];
         ref = ref.where("cliente_id","==",val);
-      } else if(filters.includes("id=eq.")) {
-        const id = filters.split("id=eq.")[1].split("&")[0];
-        const doc = await db.collection(table).doc(id).get();
+      } else if(filters.indexOf("id=eq.")>=0) {
+        var id = filters.split("id=eq.")[1].split("&")[0];
+        var doc = await db.collection(table).doc(id).get();
         return doc.exists ? [{id: doc.id, ...doc.data()}] : [];
       }
     }
-    const snap = await ref.get();
-    return snap.docs.map(d => ({id: d.id, ...d.data()}));
-  } catch(e) { console.error("sbGet error:", e); return []; }
+    var snap = await ref.get();
+    return snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); });
+  } catch(e) { console.error("sbGet",e); return []; }
 }
-
 async function sbPost(table, data) {
   try {
-    const ref = await db.collection(table).add({...data, created_at: new Date().toISOString()});
-    return [{id: ref.id, ...data}];
-  } catch(e) { console.error("sbPost error:", e); return null; }
+    var ref = await db.collection(table).add(Object.assign({},data,{created_at:new Date().toISOString()}));
+    return [{id:ref.id, ...data}];
+  } catch(e) { console.error("sbPost",e); return null; }
 }
-
 async function sbPatch(table, filter, data) {
   try {
-    const id = filter.split("id=eq.")[1];
-    await db.collection(table).doc(id).set(data, {merge: true});
+    var id = filter.split("id=eq.")[1];
+    await db.collection(table).doc(id).set(data,{merge:true});
     return true;
-  } catch(e) { console.error("sbPatch error:", e); return false; }
+  } catch(e) { console.error("sbPatch",e); return false; }
 }
 ```
 
   </script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1a56db; }
-  </style>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{background:#1a56db}</style>
 </head>
 <body>
   <div id="root"></div>
@@ -475,7 +463,7 @@ const brands=[“Todas”,“Toalhas Umedecidas”,“Fraldas Infantis”,“Fra
 const list=products.filter(p=>{const q=search.toLowerCase();
 return(p.name.toLowerCase().includes(q)||p.brand.toLowerCase().includes(q))
 &&(brand===“Todas”||p.brand===brand);});
-const getQ=id=>qtys[id]??(products.find(p=>p.id===id)?.minQty??1);
+const getQ=id=>(qtys[id]!==undefined&&qtys[id]!==null)?qtys[id]:1;
 const items=Object.keys(cart).map(id=>{const p=products.find(x=>x.id===+id);return p?{…p,qty:getQ(+id)}:null;}).filter(Boolean);
 const count=items.reduce((s,i)=>s+i.qty,0);
 const total=items.reduce((s,i)=>s+i.qty*i.price,0);
@@ -1271,7 +1259,7 @@ return (
         <div style={S.grid}>
           {list.map((p,i)=>(
             <div key={p.id} className="hcard fi" style={{...S.card,animationDelay:`${i*45}ms`}}>
-              {p.tag&&<span style={{...S.tag,background:TAGS[p.tag]?.bg,color:TAGS[p.tag]?.tx}}>{p.tag}</span>}
+              {p.tag&&<span style={{...S.tag,background:TAGS[p.tag]&&TAGS[p.tag].bg,color:TAGS[p.tag]&&TAGS[p.tag].tx}}>{p.tag}</span>}
               <div style={{fontSize:28,marginBottom:2}}>{p.img}</div>
               <div style={S.cBrand}>{p.brand}</div>
               <div style={S.cName}>{p.name}</div>
@@ -1643,8 +1631,9 @@ footTxt:{fontSize:13,color:C.sub},
 };
 
 ```
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+const domContainer = document.getElementById("root");
+const root = ReactDOM.createRoot(domContainer);
+root.render(React.createElement(App));
 ```
 
   </script>
