@@ -3,15 +3,1639 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Start Zero</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#1a56db"/>
+  <title>Start Zero – Portal de Pedidos</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <style>
-    body { background: #1a56db; display: flex; align-items: center; 
-           justify-content: center; height: 100vh; margin: 0; }
-    h1 { color: white; font-family: Arial; font-size: 32px; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#1a56db;font-family:system-ui,sans-serif}
+    #loading{display:flex;flex-direction:column;align-items:center;justify-content:center;
+      height:100vh;color:white;gap:16px}
+    .spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,0.3);
+      border-top-color:#FFD000;border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .logo-text{font-size:32px;font-weight:900;letter-spacing:-0.5px}
+    .loading-text{font-size:14px;opacity:0.7}
   </style>
 </head>
 <body>
-  <h1>✅ Start Zero funcionando!</h1>
+  <div id="loading">
+    <div class="logo-text">Start Zero</div>
+    <div class="spinner"></div>
+    <div class="loading-text">Carregando...</div>
+  </div>
+  <div id="root" style="display:none"></div>
+
+  <script>
+    // Firebase init
+    firebase.initializeApp({
+      apiKey: "AIzaSyBR66UYXRE1n8YWUi8H5IMaHp4JEf7tqtE",
+      authDomain: "start-zero-a8af0.firebaseapp.com",
+      projectId: "start-zero-a8af0",
+      storageBucket: "start-zero-a8af0.firebasestorage.app",
+      messagingSenderId: "871661353541",
+      appId: "1:871661353541:web:2c12adde73b761ddb6012c"
+    });
+    const db = firebase.firestore();
+
+    async function sbGet(table, filters) {
+      try {
+        var ref = db.collection(table);
+        if(filters) {
+          if(filters.indexOf("email=eq.")>=0){var v=decodeURIComponent(filters.split("email=eq.")[1].split("&")[0]);ref=ref.where("email","==",v);}
+          else if(filters.indexOf("celular=eq.")>=0){var v=decodeURIComponent(filters.split("celular=eq.")[1].split("&")[0]);ref=ref.where("celular","==",v);}
+          else if(filters.indexOf("cnpj=eq.")>=0){var v=decodeURIComponent(filters.split("cnpj=eq.")[1].split("&")[0]);ref=ref.where("cnpj","==",v);}
+          else if(filters.indexOf("cliente_id=eq.")>=0){var v=filters.split("cliente_id=eq.")[1].split("&")[0];ref=ref.where("cliente_id","==",v);}
+          else if(filters.indexOf("id=eq.")>=0){var id=filters.split("id=eq.")[1].split("&")[0];var d=await db.collection(table).doc(id).get();return d.exists?[Object.assign({id:d.id},d.data())]:[]; }
+        }
+        var snap = await ref.get();
+        return snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});
+      } catch(e){console.error("sbGet",e);return[];}
+    }
+    async function sbPost(table, data) {
+      try{var ref=await db.collection(table).add(Object.assign({},data,{created_at:new Date().toISOString()}));return[Object.assign({id:ref.id},data)];}
+      catch(e){console.error("sbPost",e);return null;}
+    }
+    async function sbPatch(table, filter, data) {
+      try{var id=filter.split("id=eq.")[1];await db.collection(table).doc(id).set(data,{merge:true});return true;}
+      catch(e){console.error("sbPatch",e);return false;}
+    }
+  </script>
+
+  <script id="app-code" type="text/babel" data-presets="react">
+    const { useState, useEffect, useRef } = React;
+// v2.0 - auth screen rewritten
+import { useState, useEffect } from "react";
+
+/* ── Persistent store backed by localStorage ── */
+/* ── Firebase Firestore ── */
+const FB_CONFIG = {
+  apiKey: "AIzaSyBR66UYXRE1n8YWUi8H5IMaHp4JEf7tqtE",
+  authDomain: "start-zero-a8af0.firebaseapp.com",
+  projectId: "start-zero-a8af0",
+};
+const FB_URL = "https://firestore.googleapis.com/v1/projects/start-zero-a8af0/databases/(default)/documents";
+
+async function fbGetToken() {
+  // Use Firebase REST API with API key - no auth needed in test mode
+  return FB_CONFIG.apiKey;
+}
+
+function fbToObj(doc) {
+  // Convert Firestore document fields to plain object
+  if(!doc || !doc.fields) return null;
+  const obj = { id: doc.name ? doc.name.split("/").pop() : "" };
+  for(const [k,v] of Object.entries(doc.fields)) {
+    if(v.stringValue !== undefined)  obj[k] = v.stringValue;
+    else if(v.integerValue !== undefined) obj[k] = Number(v.integerValue);
+    else if(v.doubleValue !== undefined)  obj[k] = Number(v.doubleValue);
+    else if(v.booleanValue !== undefined) obj[k] = v.booleanValue;
+    else if(v.timestampValue !== undefined) obj[k] = v.timestampValue;
+    else if(v.arrayValue !== undefined) obj[k] = (v.arrayValue.values||[]).map(i=>i.stringValue||i.integerValue||"");
+    else obj[k] = "";
+  }
+  return obj;
+}
+
+function objToFb(obj) {
+  // Convert plain object to Firestore fields
+  const fields = {};
+  for(const [k,v] of Object.entries(obj)) {
+    if(v === null || v === undefined) continue;
+    if(typeof v === "number") fields[k] = { doubleValue: v };
+    else if(typeof v === "boolean") fields[k] = { booleanValue: v };
+    else fields[k] = { stringValue: String(v) };
+  }
+  return { fields };
+}
+
+async function fbGet(collection, docId="") {
+  try {
+    const url = docId
+      ? `${FB_URL}/${collection}/${docId}`
+      : `${FB_URL}/${collection}?key=${FB_CONFIG.apiKey}`;
+    const r = await fetch(url + (docId ? `?key=${FB_CONFIG.apiKey}` : ""));
+    if(!r.ok) return docId ? null : [];
+    const j = await r.json();
+    if(docId) return fbToObj(j);
+    return (j.documents||[]).map(fbToObj).filter(Boolean);
+  } catch { return docId ? null : []; }
+}
+
+async function fbQuery(collection, field, op, value) {
+  try {
+    const body = {
+      structuredQuery: {
+        from: [{ collectionId: collection }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: field },
+            op: op === "==" ? "EQUAL" : op,
+            value: { stringValue: String(value) }
+          }
+        }
+      }
+    };
+    const r = await fetch(`${FB_URL.replace("/documents","")}:runQuery?key=${FB_CONFIG.apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) return [];
+    const j = await r.json();
+    return j.filter(x=>x.document).map(x=>fbToObj(x.document)).filter(Boolean);
+  } catch { return []; }
+}
+
+async function fbSet(collection, docId, data) {
+  try {
+    const url = `${FB_URL}/${collection}/${docId}?key=${FB_CONFIG.apiKey}`;
+    const r = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(objToFb(data))
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
+async function fbAdd(collection, data) {
+  try {
+    const url = `${FB_URL}/${collection}?key=${FB_CONFIG.apiKey}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(objToFb(data))
+    });
+    if(!r.ok) return null;
+    const j = await r.json();
+    return fbToObj(j);
+  } catch { return null; }
+}
+
+// Compatibility wrappers
+async function sbGet(table, filters="") {
+  if(filters.includes("email=eq.")) {
+    const val = decodeURIComponent(filters.split("email=eq.")[1].split("&")[0]);
+    return fbQuery(table, "email", "==", val);
+  }
+  if(filters.includes("celular=eq.")) {
+    const val = decodeURIComponent(filters.split("celular=eq.")[1].split("&")[0]);
+    return fbQuery(table, "celular", "==", val);
+  }
+  if(filters.includes("cnpj=eq.")) {
+    const val = decodeURIComponent(filters.split("cnpj=eq.")[1].split("&")[0]);
+    return fbQuery(table, "cnpj", "==", val);
+  }
+  if(filters.includes("id=eq.")) {
+    const id = filters.split("id=eq.")[1].split("&")[0];
+    const doc = await fbGet(table, id);
+    return doc ? [doc] : [];
+  }
+  if(filters.includes("cliente_id=eq.")) {
+    const id = filters.split("cliente_id=eq.")[1].split("&")[0];
+    return fbQuery(table, "cliente_id", "==", id);
+  }
+  return fbGet(table);
+}
+async function sbPost(table, data) {
+  const result = await fbAdd(table, data);
+  return result ? [result] : null;
+}
+async function sbPatch(table, filter, data) {
+  const id = filter.split("id=eq.")[1];
+  return fbSet(table, id, data);
+}
+
+/* ── In-memory store for session state ── */
+const STORE = {
+  _history: [], _profile: {}, _registered: false, _registeredCNPJ: "", _clientCode: "", _clientId: "",
+  get history()        { return STORE._history; },
+  set history(v)       { STORE._history = v; },
+  get profile()        { return STORE._profile; },
+  set profile(v)       { STORE._profile = v; },
+  get registered()     { return STORE._registered; },
+  set registered(v)    { STORE._registered = v; },
+  get registeredCNPJ() { return STORE._registeredCNPJ; },
+  set registeredCNPJ(v){ STORE._registeredCNPJ = v; },
+  get clientCode()     { return STORE._clientCode; },
+  set clientCode(v)    { STORE._clientCode = v; },
+  get clientId()       { return STORE._clientId; },
+  set clientId(v)      { STORE._clientId = v; },
+};
+
+const LOGO_B64 = "data:image/png;base64,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gKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEEHQACCDoABBA0AEggKADQABBB4AAgg4AAQQdAAIIOgAEGBr0AfxTs9GoN06P1WUXjtXFkxtqYnO7xsfaNbZ+uEaGm9UeatbKStVfll6pxb8u18LZpfrDC4s1f2axTj37p/rNMy/UU/MvDfoxABgAQR+gDaND9a4rOrV/tlNX7NhSM9ObauO61X0kpxcW6+STC/WTx/5Y3//5fD306PNduvbvrp45rz59w6VdnXkuev+XflxLyys9m/+ZG99Qe3aOd33uD37x+/rmfU90fe5/MnPRpvrqR97Ut33/i5cWl+rsn5frxZeX6qn5s/XrZ16sE4+fqdMLi13bsa7dqrs/e2XX5p2rvnL3Y11/h9A7gt5nQ61G3bBnqm5+x7Y6cHmn1o+0ujp/YvNIzc12am62U5+76bL63fMv170PPVt3PvB0Pfz4mVXPnxofreveNtmFS89tQ61mLS0v92R2e6hZn/rAJXXepnbXZ++cHutr0MfH2mvi+7D8yko98sRCPXBivr7z4G/r5JMLq5o3PNRcE8+9Wncdf3rQJ/AqCHqfbN4wXIcPba/b3v362jaxrm97p8bX1eFD2+tj122v4796ru6451Qde3i+b/v5d9fvmepJzKuqLp7cUHOznTr+yHM9mb9WtZqN2rVjS+3asaVuv/7SOvbL+brj3lP1o5OnB30adI0/xfVYs9Gow4e216PfOlBHbt3Z15j/q0ajav9sp+4/sqfu++Lba+aiTQO5g6pbrt3W0/kf2tfb+Wtdq9mog7sn64df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";
+function Logo({ size=48 }) {
+  return <img src={LOGO_B64} alt="Start Zero" style={{width:size,height:size,borderRadius:8,objectFit:"cover",flexShrink:0}}/>;
+}
+
+const CEP_EXACT = {
+"01001000":{l:"Praça da Sé",b:"Sé",c:"São Paulo",u:"SP"},
+"01310100":{l:"Avenida Paulista",b:"Bela Vista",c:"São Paulo",u:"SP"},
+"01310200":{l:"Avenida Paulista",b:"Bela Vista",c:"São Paulo",u:"SP"},
+"01415001":{l:"Rua Augusta",b:"Consolação",c:"São Paulo",u:"SP"},
+"01050010":{l:"Rua Direita",b:"Centro Histórico",c:"São Paulo",u:"SP"},
+"02454000":{l:"Avenida Imirim",b:"Imirim",c:"São Paulo",u:"SP"},
+"03310000":{l:"Avenida Radial Leste",b:"Tatuapé",c:"São Paulo",u:"SP"},
+"04538133":{l:"Avenida Brigadeiro Faria Lima",b:"Itaim Bibi",c:"São Paulo",u:"SP"},
+"05425070":{l:"Avenida das Nações Unidas",b:"Vila Gertrudes",c:"São Paulo",u:"SP"},
+"05652000":{l:"Estrada do Jaraguá",b:"Jaraguá",c:"São Paulo",u:"SP"},
+"06010010":{l:"Rua Arnaldo Niskier",b:"Centro",c:"Osasco",u:"SP"},
+"06020100":{l:"Avenida dos Autonomistas",b:"Km 18",c:"Osasco",u:"SP"},
+"07012031":{l:"Rua Três",b:"Jardim Presidente Dutra",c:"Guarulhos",u:"SP"},
+"07012000":{l:"Rua Três",b:"Jardim Presidente Dutra",c:"Guarulhos",u:"SP"},
+"07034000":{l:"Avenida Monteiro Lobato",b:"Pimentas",c:"Guarulhos",u:"SP"},
+"07110000":{l:"Rua Emílio Ribas",b:"Centro",c:"Guarulhos",u:"SP"},
+"07180000":{l:"Rua Paraná",b:"Vila Galvão",c:"Guarulhos",u:"SP"},
+"09010000":{l:"Rua Coronel Oliveira Lima",b:"Centro",c:"Santo André",u:"SP"},
+"09040000":{l:"Avenida Industrial",b:"Bairro Casa Branca",c:"Santo André",u:"SP"},
+"09370000":{l:"Rua Cel. Adhemar Pereira de Barros",b:"Centro",c:"Mauá",u:"SP"},
+"09520000":{l:"Rua Visconde de Inhaúma",b:"Centro",c:"São Caetano do Sul",u:"SP"},
+"09710000":{l:"Rua Marechal Deodoro",b:"Centro",c:"São Bernardo do Campo",u:"SP"},
+"09715001":{l:"Avenida Kennedy",b:"Nova Petrópolis",c:"São Bernardo do Campo",u:"SP"},
+"09930000":{l:"Rua Manoel da Nóbrega",b:"Centro",c:"Diadema",u:"SP"},
+"11010010":{l:"Rua XV de Novembro",b:"Centro",c:"Santos",u:"SP"},
+"11065200":{l:"Avenida Ana Costa",b:"Vila Mathias",c:"Santos",u:"SP"},
+"11410000":{l:"Avenida Puglisi",b:"Centro",c:"Guarujá",u:"SP"},
+"12020010":{l:"Rua 4 de Setembro",b:"Centro",c:"Taubaté",u:"SP"},
+"12209010":{l:"Rua Rubião Júnior",b:"Centro",c:"São José dos Campos",u:"SP"},
+"12242190":{l:"Avenida Brasil",b:"Jardim Esplanada",c:"São José dos Campos",u:"SP"},
+"13010000":{l:"Rua Onze de Agosto",b:"Centro",c:"Campinas",u:"SP"},
+"13015000":{l:"Avenida Francisco Glicério",b:"Centro",c:"Campinas",u:"SP"},
+"13087000":{l:"Rua José Pires",b:"Jardim Flamboyant",c:"Campinas",u:"SP"},
+"13400010":{l:"Rua do Rosário",b:"Centro",c:"Piracicaba",u:"SP"},
+"14010020":{l:"Rua Álvares Cabral",b:"Centro",c:"Ribeirão Preto",u:"SP"},
+"14096160":{l:"Avenida Professor João Fiúsa",b:"Ribeirânia",c:"Ribeirão Preto",u:"SP"},
+"17010010":{l:"Rua Araújo Leite",b:"Centro",c:"Bauru",u:"SP"},
+"18010100":{l:"Rua Quinze de Novembro",b:"Centro",c:"Sorocaba",u:"SP"},
+"18047620":{l:"Avenida Dom Aguirre",b:"Chácaras Anhanguera",c:"Sorocaba",u:"SP"},
+"20040020":{l:"Avenida Rio Branco",b:"Centro",c:"Rio de Janeiro",u:"RJ"},
+"20211110":{l:"Avenida Presidente Vargas",b:"Centro",c:"Rio de Janeiro",u:"RJ"},
+"21000000":{l:"Avenida Brasil",b:"Bonsucesso",c:"Rio de Janeiro",u:"RJ"},
+"22041011":{l:"Avenida Atlântica",b:"Copacabana",c:"Rio de Janeiro",u:"RJ"},
+"22411000":{l:"Rua Visconde de Pirajá",b:"Ipanema",c:"Rio de Janeiro",u:"RJ"},
+"22470010":{l:"Rua Marquês de São Vicente",b:"Gávea",c:"Rio de Janeiro",u:"RJ"},
+"22793000":{l:"Avenida das Américas",b:"Barra da Tijuca",c:"Rio de Janeiro",u:"RJ"},
+"24020005":{l:"Rua da Conceição",b:"Centro",c:"Niterói",u:"RJ"},
+"24210005":{l:"Rua Gavião Peixoto",b:"Icaraí",c:"Niterói",u:"RJ"},
+"25011000":{l:"Rua José de Alvarenga",b:"Centro",c:"Duque de Caxias",u:"RJ"},
+"26210000":{l:"Rua Mal. Deodoro",b:"Centro",c:"Nova Iguaçu",u:"RJ"},
+"29010010":{l:"Avenida Jerônimo Monteiro",b:"Centro",c:"Vitória",u:"ES"},
+"29055280":{l:"Avenida Nossa Senhora da Penha",b:"Praia do Canto",c:"Vitória",u:"ES"},
+"30110010":{l:"Avenida Afonso Pena",b:"Centro",c:"Belo Horizonte",u:"MG"},
+"30130010":{l:"Rua dos Caetés",b:"Centro",c:"Belo Horizonte",u:"MG"},
+"30160010":{l:"Avenida do Contorno",b:"Santa Efigênia",c:"Belo Horizonte",u:"MG"},
+"30315970":{l:"Avenida Raja Gabaglia",b:"Luxemburgo",c:"Belo Horizonte",u:"MG"},
+"32040010":{l:"Avenida João César de Oliveira",b:"Eldorado",c:"Contagem",u:"MG"},
+"32600000":{l:"Avenida Américo Vespúcio",b:"Imbiruçu",c:"Betim",u:"MG"},
+"35170000":{l:"Rua Vereador Arlindo Gomes",b:"Centro",c:"Coronel Fabriciano",u:"MG"},
+"36010010":{l:"Avenida Rio Branco",b:"Centro",c:"Juiz de Fora",u:"MG"},
+"36036330":{l:"Rua Halfeld",b:"Centro",c:"Juiz de Fora",u:"MG"},
+"38400108":{l:"Avenida Afonso Pena",b:"Centro",c:"Uberlândia",u:"MG"},
+"38411156":{l:"Avenida João Naves de Ávila",b:"Santa Mônica",c:"Uberlândia",u:"MG"},
+"39400000":{l:"Rua Dr. Chaves",b:"Centro",c:"Montes Claros",u:"MG"},
+"40010010":{l:"Praça Municipal",b:"Centro",c:"Salvador",u:"BA"},
+"40170110":{l:"Avenida Sete de Setembro",b:"Centro",c:"Salvador",u:"BA"},
+"41830000":{l:"Avenida Tancredo Neves",b:"Caminho das Árvores",c:"Salvador",u:"BA"},
+"44001010":{l:"Rua Marechal Deodoro",b:"Centro",c:"Feira de Santana",u:"BA"},
+"49010010":{l:"Rua João Pessoa",b:"Centro",c:"Aracaju",u:"SE"},
+"50010040":{l:"Avenida Guararapes",b:"Santo Antônio",c:"Recife",u:"PE"},
+"51020060":{l:"Avenida Boa Viagem",b:"Boa Viagem",c:"Recife",u:"PE"},
+"52050000":{l:"Rua Corredor do Bispo",b:"Casa Amarela",c:"Recife",u:"PE"},
+"55010040":{l:"Rua Vigário Freire",b:"Centro",c:"Caruaru",u:"PE"},
+"56304000":{l:"Rua São Pedro",b:"Centro",c:"Petrolina",u:"PE"},
+"57020000":{l:"Rua do Sol",b:"Centro",c:"Maceió",u:"AL"},
+"57035250":{l:"Avenida Álvaro Otacílio",b:"Ponta Verde",c:"Maceió",u:"AL"},
+"58010000":{l:"Praça Pedro Américo",b:"Centro",c:"João Pessoa",u:"PB"},
+"58038000":{l:"Avenida Epitácio Pessoa",b:"Tambaú",c:"João Pessoa",u:"PB"},
+"59010000":{l:"Avenida Deodoro da Fonseca",b:"Cidade Alta",c:"Natal",u:"RN"},
+"59064400":{l:"Avenida Engenheiro Roberto Freire",b:"Ponta Negra",c:"Natal",u:"RN"},
+"60010010":{l:"Rua Major Facundo",b:"Centro",c:"Fortaleza",u:"CE"},
+"60160050":{l:"Avenida Beira Mar",b:"Meireles",c:"Fortaleza",u:"CE"},
+"60180001":{l:"Avenida Santos Dumont",b:"Varjota",c:"Fortaleza",u:"CE"},
+"63010010":{l:"Rua São Pedro",b:"Centro",c:"Juazeiro do Norte",u:"CE"},
+"64001010":{l:"Rua Rui Barbosa",b:"Centro",c:"Teresina",u:"PI"},
+"65010010":{l:"Rua Grande",b:"Centro",c:"São Luís",u:"MA"},
+"65076820":{l:"Avenida dos Holandeses",b:"Ponta do Farol",c:"São Luís",u:"MA"},
+"66010010":{l:"Avenida Presidente Vargas",b:"Campina",c:"Belém",u:"PA"},
+"66060000":{l:"Avenida Nazaré",b:"Nazaré",c:"Belém",u:"PA"},
+"69010010":{l:"Avenida Eduardo Ribeiro",b:"Centro",c:"Manaus",u:"AM"},
+"69060010":{l:"Avenida Djalma Batista",b:"Chapada",c:"Manaus",u:"AM"},
+"70040010":{l:"Esplanada dos Ministérios",b:"Brasília",c:"Brasília",u:"DF"},
+"70070120":{l:"Setor Comercial Sul",b:"Asa Sul",c:"Brasília",u:"DF"},
+"70714900":{l:"SQN 316",b:"Asa Norte",c:"Brasília",u:"DF"},
+"71020060":{l:"Av. das Araucárias",b:"Águas Claras",c:"Brasília",u:"DF"},
+"74010010":{l:"Avenida Goiás",b:"Centro",c:"Goiânia",u:"GO"},
+"74810100":{l:"Avenida T-63",b:"Setor Bueno",c:"Goiânia",u:"GO"},
+"74904010":{l:"Rua 14",b:"Centro",c:"Aparecida de Goiânia",u:"GO"},
+"75110010":{l:"Rua Manoel de Abreu",b:"Centro",c:"Anápolis",u:"GO"},
+"77001002":{l:"Quadra 103 Sul",b:"Plano Diretor Sul",c:"Palmas",u:"TO"},
+"78005540":{l:"Avenida Getúlio Vargas",b:"Centro-Norte",c:"Cuiabá",u:"MT"},
+"78043430":{l:"Avenida do CPA",b:"CPA I",c:"Cuiabá",u:"MT"},
+"79002010":{l:"Avenida Afonso Pena",b:"Centro",c:"Campo Grande",u:"MS"},
+"79004312":{l:"Rua 14 de Julho",b:"Amambaí",c:"Campo Grande",u:"MS"},
+"80010010":{l:"Rua XV de Novembro",b:"Centro",c:"Curitiba",u:"PR"},
+"80230130":{l:"Avenida República Argentina",b:"Portão",c:"Curitiba",u:"PR"},
+"80420060":{l:"Avenida Marechal Floriano Peixoto",b:"Rebouças",c:"Curitiba",u:"PR"},
+"82520490":{l:"Rua Deputado Mário Berger",b:"Bacacheri",c:"Curitiba",u:"PR"},
+"83005010":{l:"Avenida Rui Barbosa",b:"Centro",c:"São José dos Pinhais",u:"PR"},
+"85810010":{l:"Rua Paraná",b:"Centro",c:"Cascavel",u:"PR"},
+"86010010":{l:"Rua Belo Horizonte",b:"Centro",c:"Londrina",u:"PR"},
+"86039100":{l:"Avenida Higienópolis",b:"Higienópolis",c:"Londrina",u:"PR"},
+"87013010":{l:"Avenida Brasil",b:"Zona 01",c:"Maringá",u:"PR"},
+"87030010":{l:"Avenida Cerro Azul",b:"Zona 02",c:"Maringá",u:"PR"},
+"88010010":{l:"Rua Felipe Schmidt",b:"Centro",c:"Florianópolis",u:"SC"},
+"88063000":{l:"Rodovia José Carlos Daux",b:"João Paulo",c:"Florianópolis",u:"SC"},
+"89010100":{l:"Rua 15 de Novembro",b:"Centro",c:"Blumenau",u:"SC"},
+"89201900":{l:"Rua Nove de Março",b:"Centro",c:"Joinville",u:"SC"},
+"90010000":{l:"Rua dos Andradas",b:"Centro Histórico",c:"Porto Alegre",u:"RS"},
+"90110180":{l:"Avenida Borges de Medeiros",b:"Praia de Belas",c:"Porto Alegre",u:"RS"},
+"91349001":{l:"Rua Avaí",b:"Petrópolis",c:"Porto Alegre",u:"RS"},
+"92010000":{l:"Avenida Rio Branco",b:"Centro",c:"Canoas",u:"RS"},
+"93010010":{l:"Rua Independência",b:"Centro",c:"São Leopoldo",u:"RS"},
+"94010000":{l:"Rua Guilherme Schell",b:"Centro",c:"Gravataí",u:"RS"},
+"95020000":{l:"Rua Sinimbu",b:"Centro",c:"Caxias do Sul",u:"RS"},
+"96010010":{l:"Rua Félix da Cunha",b:"Centro",c:"Pelotas",u:"RS"},
+"97010010":{l:"Rua do Acampamento",b:"Centro",c:"Santa Maria",u:"RS"},
+"99010010":{l:"Rua Bento Gonçalves",b:"Centro",c:"Passo Fundo",u:"RS"}
+};
+const CEP_PREFIX = {"01":{c:"São Paulo",u:"SP"},"02":{c:"São Paulo",u:"SP"},"03":{c:"São Paulo",u:"SP"},"04":{c:"São Paulo",u:"SP"},"05":{c:"São Paulo",u:"SP"},"06":{c:"Osasco",u:"SP"},"07":{c:"Guarulhos",u:"SP"},"08":{c:"São Paulo",u:"SP"},"09":{c:"Santo André",u:"SP"},"10":{c:"São Paulo",u:"SP"},"11":{c:"Santos",u:"SP"},"12":{c:"São José dos Campos",u:"SP"},"13":{c:"Campinas",u:"SP"},"14":{c:"Ribeirão Preto",u:"SP"},"15":{c:"São José do Rio Preto",u:"SP"},"16":{c:"Araçatuba",u:"SP"},"17":{c:"Bauru",u:"SP"},"18":{c:"Sorocaba",u:"SP"},"19":{c:"Presidente Prudente",u:"SP"},"20":{c:"Rio de Janeiro",u:"RJ"},"21":{c:"Rio de Janeiro",u:"RJ"},"22":{c:"Rio de Janeiro",u:"RJ"},"23":{c:"Rio de Janeiro",u:"RJ"},"24":{c:"Niterói",u:"RJ"},"25":{c:"Duque de Caxias",u:"RJ"},"26":{c:"Nova Iguaçu",u:"RJ"},"27":{c:"Volta Redonda",u:"RJ"},"28":{c:"Campos dos Goytacazes",u:"RJ"},"29":{c:"Vitória",u:"ES"},"30":{c:"Belo Horizonte",u:"MG"},"31":{c:"Belo Horizonte",u:"MG"},"32":{c:"Contagem",u:"MG"},"33":{c:"Betim",u:"MG"},"34":{c:"Nova Lima",u:"MG"},"35":{c:"Ipatinga",u:"MG"},"36":{c:"Juiz de Fora",u:"MG"},"37":{c:"Pouso Alegre",u:"MG"},"38":{c:"Uberaba",u:"MG"},"39":{c:"Montes Claros",u:"MG"},"40":{c:"Salvador",u:"BA"},"41":{c:"Salvador",u:"BA"},"42":{c:"Feira de Santana",u:"BA"},"43":{c:"Ilhéus",u:"BA"},"44":{c:"Juazeiro",u:"BA"},"45":{c:"Vitória da Conquista",u:"BA"},"46":{c:"Barreiras",u:"BA"},"47":{c:"Aracaju",u:"SE"},"48":{c:"Maceió",u:"AL"},"49":{c:"Aracaju",u:"SE"},"50":{c:"Recife",u:"PE"},"51":{c:"Recife",u:"PE"},"52":{c:"Recife",u:"PE"},"53":{c:"Olinda",u:"PE"},"54":{c:"Caruaru",u:"PE"},"55":{c:"Petrolina",u:"PE"},"56":{c:"Petrolina",u:"PE"},"57":{c:"Maceió",u:"AL"},"58":{c:"João Pessoa",u:"PB"},"59":{c:"Natal",u:"RN"},"60":{c:"Fortaleza",u:"CE"},"61":{c:"Fortaleza",u:"CE"},"62":{c:"Fortaleza",u:"CE"},"63":{c:"Juazeiro do Norte",u:"CE"},"64":{c:"Teresina",u:"PI"},"65":{c:"São Luís",u:"MA"},"66":{c:"Belém",u:"PA"},"67":{c:"Ananindeua",u:"PA"},"68":{c:"Santarém",u:"PA"},"69":{c:"Manaus",u:"AM"},"70":{c:"Brasília",u:"DF"},"71":{c:"Brasília",u:"DF"},"72":{c:"Brasília",u:"DF"},"73":{c:"Brasília",u:"DF"},"74":{c:"Goiânia",u:"GO"},"75":{c:"Anápolis",u:"GO"},"76":{c:"Rio Verde",u:"GO"},"77":{c:"Palmas",u:"TO"},"78":{c:"Cuiabá",u:"MT"},"79":{c:"Campo Grande",u:"MS"},"80":{c:"Curitiba",u:"PR"},"81":{c:"Curitiba",u:"PR"},"82":{c:"Curitiba",u:"PR"},"83":{c:"São José dos Pinhais",u:"PR"},"84":{c:"Londrina",u:"PR"},"85":{c:"Cascavel",u:"PR"},"86":{c:"Londrina",u:"PR"},"87":{c:"Maringá",u:"PR"},"88":{c:"Florianópolis",u:"SC"},"89":{c:"Joinville",u:"SC"},"90":{c:"Porto Alegre",u:"RS"},"91":{c:"Porto Alegre",u:"RS"},"92":{c:"Canoas",u:"RS"},"93":{c:"São Leopoldo",u:"RS"},"94":{c:"Gravataí",u:"RS"},"95":{c:"Caxias do Sul",u:"RS"},"96":{c:"Pelotas",u:"RS"},"97":{c:"Santa Maria",u:"RS"},"98":{c:"Passo Fundo",u:"RS"},"99":{c:"Uruguaiana",u:"RS"}};
+
+function lookupCep(raw) {
+  const c = raw.replace(/\D/g,"");
+  if (c.length !== 8) return null;
+  const pf = CEP_PREFIX[c.slice(0,2)];
+  if (pf) return { cidade:pf.c, estado:pf.u };
+  return null;
+}
+
+const C = {
+  bg:"#1a56db", bgW:"#1e5fe8", blue:"#ffffff", blueL:"#bfdbfe",
+  blueXL:"rgba(255,255,255,0.15)", blueD:"#1340b0", text:"#ffffff", sub:"#c7d9fd",
+  border:"rgba(255,255,255,0.2)", borderB:"rgba(255,255,255,0.35)", green:"#4ade80",
+  yellow:"#fbbf24", yellowBg:"rgba(251,191,36,0.15)", red:"#fca5a5",
+};
+
+const products = [
+  {id:1,name:"Toalha Umedecida Sem Perfume", brand:"Toalhas Umedecidas", unit:"Caixa c/ 24 pacotes",price:89.90, minQty:1, stock:320,tag:"Mais Vendido",img:"🧻",desc:"Fórmula suave, pele sensível. Sem álcool e parabenos."},
+  {id:2,name:"Toalha Umedecida Bebê",        brand:"Fraldas Infantis",   unit:"Caixa c/ 24 pacotes",price:104.50,minQty:1, stock:210,tag:"Premium",     img:"👶",desc:"pH neutro. Dermatologicamente testada para recém-nascidos."},
+  {id:3,name:"Toalha Umedecida Antibact.",   brand:"Toalhas Umedecidas", unit:"Caixa c/ 12 pacotes",price:67.00, minQty:1,stock:480,tag:"Promoção",    img:"🛡️",desc:"Elimina 99,9% das bactérias. Com clorexidina."},
+  {id:4,name:"Toalha Umedecida Aloe Vera",   brand:"Toalhas Umedecidas", unit:"Caixa c/ 24 pacotes",price:96.00, minQty:1, stock:175,tag:"Novidade",    img:"🌿",desc:"Extrato de Aloe Vera. Hidratação e frescor prolongados."},
+  {id:5,name:"Toalha Descartável Adulto",    brand:"Fraldas Adulto",     unit:"Fardo c/ 6 rolos",   price:138.00,minQty:1, stock:90, tag:"",           img:"🏥",desc:"Extra resistente. Para higiene de pacientes acamados."},
+  {id:6,name:"Toalha Umedecida Dermo",       brand:"Fraldas Adulto",     unit:"Caixa c/ 24 pacotes",price:112.00,minQty:1, stock:130,tag:"Premium",     img:"💊",desc:"Vitamina E e pantenol. Indicação dermatológica."},
+];
+const TAGS={"Mais Vendido":{bg:"#dbeafe",tx:"#1a56db"},Premium:{bg:"#ede9fe",tx:"#6d28d9"},Promoção:{bg:"#fef3c7",tx:"#b45309"},Novidade:{bg:"#dcfce7",tx:"#15803d"}};
+const PGTOS=["À vista – PIX","À vista – Boleto","30 dias – Boleto","28/35 dias – Boleto","30/60 dias – Boleto","30/60/90 dias – Boleto"];
+const UFS=["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
+
+export default function App() {
+  const [loggedIn,setLoggedIn]=useState(false);
+  const [loginTab,setLoginTab]=useState("login"); // "login" | "register"
+  const [loginData,setLoginData]=useState({email:"",whatsapp:"",senha:""});
+  const [showSenha,setShowSenha]=useState(false);
+const [showSenhaReg,setShowSenhaReg]=useState(false);
+  const [showConfirmSenha,setShowConfirmSenha]=useState(false);
+  const [loginErr,setLoginErr]=useState("");
+  const [loginMatch,setLoginMatch]=useState(null);
+  const [regErrors,setRegErrors]=useState({});
+  const [registerSuccess,setRegisterSuccess]=useState(false);
+  const [welcomeName,setWelcomeName]=useState("");
+  const [clientCode,setClientCode]=useState("");
+  const [clientId,setClientId]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [toastMsg,setToastMsg]=useState("");
+  const [showEmailDialog,setShowEmailDialog]=useState(false);
+  const [emailDestino,setEmailDestino]=useState(""); // {nome, email, celular} if found in STORE
+const [regData,setRegData]=useState({nome:"",email:"",whatsapp:"",cnpj:"",senha:"",confirmSenha:""});
+  const [cart,setCart]=useState({});const [qtys,setQtys]=useState({});
+  const [view,setView]=useState("catalog");const [search,setSearch]=useState("");
+  const [brand,setBrand]=useState("Todas");const [done,setDone]=useState(false);
+  const [anim,setAnim]=useState(false);
+  const [ref]=useState(()=>Math.floor(Math.random()*90000)+10000);
+  const [cepMsg,setCepMsg]=useState(null);
+  const [formErrors,setFormErrors]=useState({});
+  const [confirmedItems,setConfirmedItems]=useState([]);
+  const [confirmedTotal,setConfirmedTotal]=useState(0);
+  const [orderHistory,setOrderHistory]=useState([]);
+  const [cl,setCl]=useState({razao:"",cnpj:"",ie:"",contato:"",email:"",emailXml:"",telefone:"",celular:"",
+    cep:"",logradouro:"",numero:"",complemento:"",bairro:"",cidade:"",estado:"",
+    pagamento:"À vista – PIX",prazo:"",obs:""});
+  const TEXT_FIELDS = new Set(["razao","contato","logradouro","bairro","cidade","complemento"]);
+  const upd=(f,v)=>{
+    const val = TEXT_FIELDS.has(f) ? normalizaField(f, v) : v;
+    setCl(c=>({...c,[f]:val}));
+    setFormErrors(e=>({...e,[f]:undefined}));
+  };
+  const updMany=obj=>setCl(c=>({...c,...obj}));
+
+  // Load data from STORE on mount (persists across logout/login in same session)
+  useEffect(()=>{
+    if(STORE.history.length > 0) setOrderHistory([...STORE.history]);
+    const prof = STORE.profile;
+    if(prof && Object.keys(prof).length > 0){
+      setCl(c=>({...c,...prof}));
+      if(prof.razao) setWelcomeName(prof.razao);
+    }
+  },[]);
+
+  // Persist order history to localStorage whenever it changes
+  useEffect(()=>{
+    if(orderHistory.length > 0) STORE.history = [...orderHistory];
+  },[orderHistory]);
+
+  // Auto-save ALL client fields to localStorage on every change
+  useEffect(()=>{
+    const hasData = Object.values(cl).some(v => v && v.trim && v.trim() !== "");
+    if(hasData){
+      STORE.profile = {...STORE.profile, ...cl};
+    }
+  },[cl]);
+
+
+  const brands=["Todas","Toalhas Umedecidas","Fraldas Infantis","Fraldas Adulto"];
+  const list=products.filter(p=>{const q=search.toLowerCase();
+    return(p.name.toLowerCase().includes(q)||p.brand.toLowerCase().includes(q))
+        &&(brand==="Todas"||p.brand===brand);});
+  const getQ=id=>qtys[id]??(products.find(p=>p.id===id)?.minQty??1);
+  const items=Object.keys(cart).map(id=>{const p=products.find(x=>x.id===+id);return p?{...p,qty:getQ(+id)}:null;}).filter(Boolean);
+  const count=items.reduce((s,i)=>s+i.qty,0);
+  const total=items.reduce((s,i)=>s+i.qty*i.price,0);
+  const fmt=n=>n.toFixed(2).replace(".",",");
+  const addCart=id=>{setCart(c=>({...c,[id]:true}));setAnim(true);setTimeout(()=>setAnim(false),600);};
+  const remCart=id=>{setCart(c=>{const n={...c};delete n[id];return n;});};
+  const setQ=(id,v)=>{setQtys(q=>({...q,[id]:Math.max(1,Math.min(999,+v||1))}));};
+
+  const maskCnpj=v=>v.replace(/\D/g,"").replace(/(\d{2})(\d)/,"$1.$2").replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d)/,"$1/$2").replace(/(\d{4})(\d)/,"$1-$2").slice(0,18);
+  const maskPhone=v=>v.replace(/\D/g,"").slice(0,11).replace(/(\d{2})(\d)/,"($1) $2").replace(/(\d{4,5})(\d{4})$/,"$1-$2");
+  const maskCep=v=>v.replace(/\D/g,"").replace(/(\d{5})(\d)/,"$1-$2").slice(0,9);
+
+  function aplicarCep(raw){
+    const found=lookupCep(raw);
+    if(!found){setCepMsg({type:"nao",text:"CEP não identificado — preencha manualmente."});return;}
+    updMany({cidade:found.cidade,estado:found.estado});
+    setCepMsg({type:"ok",text:`✅ ${found.cidade}/${found.estado} — complete logradouro e bairro.`});
+  }
+
+  function showToast(msg) { setToastMsg(msg); setTimeout(()=>setToastMsg(""),3000); }
+
+  function checkMatch(field, val) {
+    const p = STORE.profile;
+    if(!p || !Object.keys(p).length) return;
+    const emailMatch = field==="email" && val.trim().length>2 && p.email &&
+      p.email.toLowerCase().startsWith(val.toLowerCase().trim());
+    const phoneVal = val.replace(/\D/g,"");
+    const phoneMatch = field==="whatsapp" && phoneVal.length>3 && p.celular &&
+      p.celular.replace(/\D/g,"").startsWith(phoneVal);
+    if(emailMatch || phoneMatch) {
+      setLoginMatch(p);
+    } else {
+      setLoginMatch(null);
+    }
+  }
+
+  function applyMatch() {
+    if(!loginMatch) return;
+    setLoginData(d=>({
+      ...d,
+      email: loginMatch.email || d.email,
+      whatsapp: loginMatch.celular || d.whatsapp,
+    }));
+  }
+
+  async function handleLogin(){
+    const e = loginData.email.trim();
+    const w = loginData.whatsapp.replace(/\D/g,"");
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if(!e && w.length<10){ setLoginErr("Informe e-mail ou WhatsApp válido."); return; }
+    if(e && !emailRe.test(e)){ setLoginErr("E-mail inválido."); return; }
+    if(!loginData.senha.trim()){ setLoginErr("Senha é obrigatória."); return; }
+    if(loginData.senha.length<6){ setLoginErr("Senha deve ter no mínimo 6 caracteres."); return; }
+    setLoading(true);
+    try {
+      let rows;
+      if(e) rows = await sbGet("clientes", "email=eq."+encodeURIComponent(e)+"&select=*");
+      else  rows = await sbGet("clientes", "celular=eq."+encodeURIComponent(maskPhone(loginData.whatsapp))+"&select=*");
+      if(!rows||rows.length===0){ setLoginErr("Cadastro não encontrado."); setLoading(false); return; }
+      const cliente = rows[0];
+      if(cliente.senha_hash !== loginData.senha){ setLoginErr("Senha incorreta."); setLoading(false); return; }
+      // Load client data into state
+      const p = cliente;
+      setCl(c=>({...c,
+        razao:p.razao||"", cnpj:p.cnpj||"", ie:p.ie||"", contato:p.contato||"",
+        email:p.email||"", emailXml:p.email_xml||"", telefone:p.telefone||"",
+        celular:p.celular||"", cep:p.cep||"", logradouro:p.logradouro||"",
+        numero:p.numero||"", complemento:p.complemento||"", bairro:p.bairro||"",
+        cidade:p.cidade||"", estado:p.estado||"",
+        pagamento:p.pagamento||"À vista – PIX", prazo:p.prazo||"", obs:p.obs||""
+      }));
+      STORE.clientId = cliente.id;
+      STORE.clientCode = cliente.client_code||"";
+      setClientId(cliente.id);
+      setClientCode(cliente.client_code||"");
+      setWelcomeName(cliente.razao);
+      // Load order history
+      const orders = await sbGet("pedidos", "cliente_id=eq."+cliente.id+"&order=created_at.desc");
+      if(orders&&orders.length>0){
+        setOrderHistory(orders.map(o=>({
+          ref:o.ref,
+          data:new Date(o.created_at).toLocaleDateString("pt-BR"),
+          hora:new Date(o.created_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
+          cliente:o.razao, cnpj:o.cnpj, pagamento:o.pagamento,
+          itens:typeof o.itens==="string"?JSON.parse(o.itens):o.itens,
+          total:Number(o.total),
+        })));
+      }
+      setLoginErr(""); setLoggedIn(true); setView("client");
+    } catch(err) {
+      setLoginErr("Erro de conexão. Verifique sua internet.");
+    }
+    setLoading(false);
+  }
+
+  async function handleRegister(){
+    if(STORE.registered || (STORE.profile && STORE.profile.razao)){
+      setLoginErr("Cadastro já realizado. Faça login para acessar.");
+      setLoginTab("login"); return;
+    }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    const w = regData.whatsapp.replace(/\D/g,"");
+    const errs = {};
+    if(!regData.nome.trim())             errs.nome = "Razão Social é obrigatória";
+    if(regData.cnpj.trim() && !validarCNPJ(regData.cnpj)) errs.cnpj = "CNPJ inválido";
+    if(!regData.email.trim())            errs.email = "E-mail é obrigatório";
+    else if(!emailRe.test(regData.email.trim())) errs.email = "E-mail inválido";
+    if(!regData.whatsapp.trim())         errs.whatsapp = "WhatsApp é obrigatório";
+    else if(w.length<10||w.length>11)    errs.whatsapp = "WhatsApp inválido — informe DDD + número";
+    if(!regData.senha||regData.senha.length<6) errs.senha = "Senha obrigatória (mínimo 6 caracteres)";
+    if(!regData.confirmSenha||!regData.confirmSenha.trim()) errs.confirmSenha = "Confirmação obrigatória";
+    else if(regData.senha!==regData.confirmSenha) errs.confirmSenha = "As senhas não conferem";
+    if(Object.keys(errs).length>0){ setRegErrors(errs); return; }
+    setRegErrors({});
+    setLoading(true);
+    try {
+      // Check CNPJ uniqueness in DB
+      if(regData.cnpj.trim()){
+        const existing = await sbGet("clientes","cnpj=eq."+encodeURIComponent(regData.cnpj)+"&select=id");
+        if(existing&&existing.length>0){
+          setRegErrors({cnpj:"Este CNPJ já possui cadastro. Faça login."});
+          setLoading(false); return;
+        }
+      }
+      const nome = regData.nome.trim();
+      const cnpjDigits = regData.cnpj ? regData.cnpj.replace(/\D/g,"") : "0000";
+      const code = "SZ"+new Date().getFullYear()+String(Math.floor(Math.random()*9000)+1000)+cnpjDigits.slice(-4);
+      const newClient = {
+        client_code: code,
+        cnpj: regData.cnpj || "00.000.000/0000-00",
+        razao: nome,
+        email: regData.email.trim(),
+        celular: maskPhone(regData.whatsapp),
+        senha_hash: regData.senha,
+      };
+      const result = await sbPost("clientes", newClient);
+      if(!result||result.length===0){
+        setLoginErr("Erro ao cadastrar. Tente novamente."); setLoading(false); return;
+      }
+      const created = result[0];
+      STORE.registered = true;
+      STORE.clientId = created.id;
+      STORE.clientCode = code;
+      STORE.profile = { razao:nome, email:regData.email.trim(), celular:maskPhone(regData.whatsapp), cnpj:regData.cnpj||"" };
+      if(regData.cnpj) STORE.registeredCNPJ = regData.cnpj.replace(/\D/g,"");
+      setClientId(created.id);
+      setClientCode(code);
+      setWelcomeName(nome);
+      upd("razao",nome); upd("email",regData.email.trim()); upd("celular",maskPhone(regData.whatsapp));
+      if(regData.cnpj) upd("cnpj",regData.cnpj);
+      setRegisterSuccess(true);
+    } catch(err) {
+      setLoginErr("Erro ao cadastrar. Tente novamente.");
+    }
+    setLoading(false);
+  }
+
+  /* Capitaliza corretamente: maiúsculas com acentos e pontuação */
+  /* Palavras que NÃO devem ser capitalizadas em títulos portugueses */
+  const PT_PREPOSITIONS = new Set([
+    "de","da","do","das","dos","e","em","na","no","nas","nos",
+    "a","o","as","os","ao","aos","à","às","por","pelo","pela",
+    "pelos","pelas","com","sem","sob","sobre","entre","para",
+    "num","numa","nuns","numas","dum","duma",
+  ]);
+
+  function toTitleCase(str) {
+    if(!str) return str;
+    // Normalize: trim extra spaces
+    const s = str.trim().replace(/\s+/g," ");
+    return s.toLowerCase().split(" ").map((word, i) => {
+      if(!word) return word;
+      // Always capitalize first and last word
+      if(i === 0) return capitalize(word);
+      // Don't capitalize prepositions/articles in middle
+      if(PT_PREPOSITIONS.has(word)) return word;
+      return capitalize(word);
+    }).join(" ");
+  }
+
+  function capitalize(word) {
+    if(!word) return word;
+    // Handle accented first chars correctly
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }
+
+  /* Normaliza campos ao gravar — aplica Title Case com regras PT */
+  function normalizaCliente() {
+    const textFields = ["razao","contato","logradouro","bairro","cidade","complemento"];
+    textFields.forEach(f => { if(cl[f]) upd(f, toTitleCase(cl[f])); });
+  }
+
+  /* Normaliza um valor de campo em tempo real enquanto o usuário digita */
+  function normalizaField(field, value) {
+    const textFields = ["razao","contato","logradouro","bairro","cidade","complemento"];
+    if(!textFields.includes(field)) return value;
+    // Capitalize only after space, hyphen, slash or start
+    const words = value.split(/( |-|\/)/);
+    return words.map((part, i) => {
+      // Separators stay as-is
+      if(part === " " || part === "-" || part === "/") return part;
+      if(!part) return part;
+      const lower = part.toLowerCase();
+      // First word always caps; others check prepositions
+      const isFirst = i === 0 || words[i-1] === "-" || words[i-1] === "/";
+      if(isFirst) return capitalize(lower);
+      if(PT_PREPOSITIONS.has(lower)) return lower;
+      return capitalize(lower);
+    }).join("");
+  }
+
+  function enviarEmailPara(destEmail) {
+    const linhaItens = confirmedItems.map(it =>
+      it.name + " - " + it.unit + " - Qtd: " + it.qty + " - R$ " + fmt(it.qty * it.price)
+    ).join("\n");
+    const end = cl.logradouro
+      + (cl.numero ? ", " + cl.numero : "")
+      + (cl.bairro ? " - " + cl.bairro : "")
+      + " - " + cl.cidade + "/" + cl.estado
+      + " - CEP: " + cl.cep;
+    const pgto = "Forma de Pagamento: " + cl.pagamento + (cl.prazo ? " | Prazo: " + cl.prazo : "");
+    const obs = cl.obs ? "\nObs: " + cl.obs : "";
+    const texto =
+      "ESPELHO DO PEDIDO\n" +
+      "Protocolo: #" + ref + "\n" +
+      "Data: " + new Date().toLocaleDateString("pt-BR") + "\n\n" +
+      "CLIENTE\n" +
+      "Razao Social: " + cl.razao + "\n" +
+      "CNPJ: " + cl.cnpj + "\n" +
+      "E-mail: " + cl.email + "\n" +
+      "Telefone: " + (cl.telefone || cl.celular) + "\n" +
+      "Endereco: " + end + "\n\n" +
+      "ITENS\n" + linhaItens + "\n\n" +
+      pgto + obs + "\n\n" +
+      "TOTAL: R$ " + fmt(confirmedTotal) + "\n\n" +
+      "Start Zero - CNPJ 24.453.519/0001-93";
+    const subject = "Pedido #" + ref + " - " + (cl.razao || "Cliente");
+    window.open("mailto:" + (destEmail || cl.email || "") + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(texto));
+  }
+  function enviarEmail() { enviarEmailPara(cl.email || ""); }
+
+
+  function gerarPDF() { gerarPDFData(confirmedItems, confirmedTotal); }
+  function gerarPDFData(confirmedItems, confirmedTotal) {
+    const dataFmt = new Date().toLocaleDateString("pt-BR") + " " +
+      new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+
+    const endFmt = [
+      cl.logradouro,
+      cl.numero && "nº "+cl.numero,
+      cl.complemento,
+      cl.bairro,
+      cl.cep && "CEP "+cl.cep,
+      cl.cidade && cl.estado ? cl.cidade+"/"+cl.estado : "",
+    ].filter(Boolean).join(", ");
+
+    const clienteRows = [
+      ["Razão Social",   cl.razao],
+      ["CNPJ",           cl.cnpj],
+      ["Insc. Estadual", cl.ie],
+      ["E-mail",         cl.email],
+      ["E-mail XML",     cl.emailXml],
+      ["Telefone",       cl.telefone || cl.celular],
+      ["Endereço",       endFmt],
+      ["Pagamento",      cl.pagamento + (cl.prazo ? " | Prazo: "+cl.prazo : "")],
+    ].filter(([,v])=>v).map(([k,v])=>`
+      <tr>
+        <td class="lbl">${k}</td>
+        <td class="val">${v.toUpperCase()}</td>
+      </tr>`).join("");
+
+    const itemRows = confirmedItems.map((it,i)=>`
+      <tr class="${i%2===0?"row-even":"row-odd"}">
+        <td style="padding:7px 10px;font-size:12px">${it.name.toUpperCase()}</td>
+        <td style="padding:7px 10px;font-size:11px;color:#555;text-align:center">${it.unit}</td>
+        <td style="padding:7px 10px;font-size:13px;font-weight:800;text-align:center;color:#1a56db">${it.qty}</td>
+        <td style="padding:7px 10px;font-size:12px;text-align:right">R$ ${(it.qty*it.price).toFixed(2).replace(".",",")}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<title>Pedido #${ref}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;background:#f0f4ff;color:#222}
+  .page{max-width:780px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.12)}
+  .header{background:#1a56db;color:#fff;padding:22px 28px;display:flex;justify-content:space-between;align-items:center}
+  .logo-wrap{display:flex;align-items:center;gap:14px}
+  .logo-img{width:52px;height:52px;border-radius:8px;object-fit:cover}
+  .logo-name{font-size:22px;font-weight:900;letter-spacing:-0.5px}
+  .logo-cnpj{font-size:10px;opacity:.65;margin-top:2px}
+  .proto-box{text-align:right}
+  .proto-num{font-size:18px;font-weight:900;letter-spacing:1px}
+  .proto-date{font-size:11px;opacity:.8;margin-top:3px}
+  .proto-status{background:rgba(255,255,255,.2);border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;display:inline-block;margin-top:6px}
+  .body{padding:24px 28px}
+  .sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#1a56db;border-bottom:2px solid #1a56db;padding-bottom:5px;margin:20px 0 12px}
+  .sec-title:first-child{margin-top:0}
+  table{width:100%;border-collapse:collapse}
+  .lbl{padding:5px 10px;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;width:140px;vertical-align:top}
+  .val{padding:5px 10px;font-size:12px;font-weight:600}
+  .items-head{background:#1a56db;color:#fff}
+  .items-head th{padding:9px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .row-even{background:#f8f9ff}
+  .row-odd{background:#fff}
+  .total-bar{background:#1a56db;color:#fff;padding:14px 28px;display:flex;justify-content:space-between;align-items:center}
+  .total-label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+  .total-value{font-size:24px;font-weight:900}
+  .footer-bar{background:#f0f4ff;padding:12px 28px;text-align:center;font-size:10px;color:#888;line-height:1.8}
+  .obs-box{background:#fff8e1;border-left:4px solid #fbbf24;padding:10px 14px;margin-top:12px;font-size:12px;border-radius:0 6px 6px 0}
+  .btn-print{display:block;margin:20px auto;background:#1a56db;color:#fff;border:none;padding:12px 40px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:Arial;letter-spacing:.5px}
+  @media print{.btn-print{display:none!important}body{background:#fff}.page{box-shadow:none;margin:0;border-radius:0}@page{margin:10mm}}
+</style>
+
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-img" src="data:image/png;base64,${logo_b64}" alt="Start Zero"/>
+      <div>
+        <div class="logo-name">START ZERO</div>
+        <div class="logo-cnpj">CNPJ 24.453.519/0001-93</div>
+      </div>
+    </div>
+    <div class="proto-box">
+      <div class="proto-num">PEDIDO #${ref}</div>
+      <div class="proto-date">${dataFmt}</div>
+      <div class="proto-status">✅ CONFIRMADO</div>
+    </div>
+  </div>
+
+  <div class="body">
+
+```
+<div class="sec-title">Dados do Cliente</div>
+<table><tbody>${clienteRows}</tbody></table>
+
+<div class="sec-title">Itens do Pedido</div>
+<table>
+  <thead class="items-head">
+    <tr>
+      <th style="text-align:left">Produto</th>
+      <th style="text-align:center">Unidade</th>
+      <th style="text-align:center">Qtd</th>
+      <th style="text-align:right">Total</th>
+    </tr>
+  </thead>
+  <tbody>${itemRows}</tbody>
+</table>
+
+${cl.obs ? `<div class="obs-box"><strong>OBS:</strong> ${cl.obs.toUpperCase()}</div>` : ""}
+```
+
+  </div>
+
+  <div class="total-bar">
+    <span class="total-label">Total do Pedido</span>
+    <span class="total-value">R$ ${confirmedTotal.toFixed(2).replace(".",",")}</span>
+  </div>
+
+  <div class="footer-bar">
+    START ZERO &nbsp;·&nbsp; CNPJ 24.453.519/0001-93 &nbsp;·&nbsp; Gerado em ${dataFmt} &nbsp;·&nbsp; Protocolo #${ref}
+  </div>
+
+<button class="btn-print" onclick="window.print()">🖨️ IMPRIMIR / SALVAR PDF</button>
+
+</div>
+</body>
+</html>`;
+
+```
+const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+const url  = URL.createObjectURL(blob);
+const a    = document.createElement("a");
+a.href     = url;
+a.download = "Pedido_"+ref+"_"+(cl.razao||"cliente").replace(/[^a-zA-Z0-9]/g,"_").toUpperCase()+".html";
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+setTimeout(()=>URL.revokeObjectURL(url), 1000);
+```
+
+}
+
+const required = cl.razao && cl.cnpj && cl.ie && cl.email && cl.emailXml &&
+(cl.telefone || cl.celular) && cl.logradouro && cl.cidade && cl.estado;
+
+function validateClient(){
+const errs={};
+const emailRe = /^[^\s@]+@[^\s@]+.[^\s@]{2,}$/;
+const cnpjRe  = /^\d{2}.\d{3}.\d{3}/\d{4}-\d{2}$/;
+if(!cl.razao.trim())         errs.razao       = “Razão Social é obrigatória”;
+if(!cl.cnpj.trim())          errs.cnpj        = “CNPJ é obrigatório”;
+else if(!cnpjRe.test(cl.cnpj)) errs.cnpj      = “CNPJ inválido (ex: 00.000.000/0001-00)”;
+if(!cl.ie.trim())             errs.ie          = “Inscrição Estadual é obrigatória”;
+if(!cl.email.trim())          errs.email       = “E-mail é obrigatório”;
+else if(!emailRe.test(cl.email)) errs.email    = “E-mail inválido”;
+if(!cl.emailXml.trim())       errs.emailXml    = “E-mail para XML é obrigatório”;
+else if(!emailRe.test(cl.emailXml)) errs.emailXml = “E-mail para XML inválido”;
+if(!cl.telefone.trim()&&!cl.celular.trim()) errs.telefone = “Informe Telefone ou Celular”;
+if(!cl.cep.trim())            errs.cep         = “CEP é obrigatório”;
+if(!cl.logradouro.trim())     errs.logradouro  = “Logradouro é obrigatório”;
+if(!cl.cidade.trim())         errs.cidade      = “Cidade é obrigatória”;
+if(!cl.estado.trim())         errs.estado      = “Estado é obrigatório”;
+setFormErrors(errs);
+return Object.keys(errs).length === 0;
+}
+async function handleOrder(){
+if(!validateClient()){setView(“client”);return;}
+normalizaCliente();
+// Save client data to Supabase first
+if(STORE.clientId){
+await sbPatch(“clientes”,“id=eq.”+STORE.clientId,{
+razao:cl.razao, ie:cl.ie, contato:cl.contato, email:cl.email,
+email_xml:cl.emailXml, telefone:cl.telefone, celular:cl.celular,
+cep:cl.cep, logradouro:cl.logradouro, numero:cl.numero,
+complemento:cl.complemento, bairro:cl.bairro, cidade:cl.cidade,
+estado:cl.estado, pagamento:cl.pagamento, prazo:cl.prazo, obs:cl.obs,
+});
+}
+const snap = {
+ref: ref + “-” + (orderHistory.length+1),
+data: new Date().toLocaleDateString(“pt-BR”),
+hora: new Date().toLocaleTimeString(“pt-BR”,{hour:“2-digit”,minute:“2-digit”}),
+cliente: cl.razao,
+cnpj: cl.cnpj,
+pagamento: cl.pagamento,
+itens: […items],
+total: total,
+};
+setOrderHistory(h=>[snap,…h]);
+// Save profile to STORE
+STORE.profile = {
+razao:cl.razao, email:cl.email, celular:cl.celular, telefone:cl.telefone,
+cnpj:cl.cnpj, cep:cl.cep, logradouro:cl.logradouro, numero:cl.numero,
+complemento:cl.complemento, bairro:cl.bairro, cidade:cl.cidade,
+estado:cl.estado, pagamento:cl.pagamento,
+};
+// Save order to Supabase
+if(STORE.clientId){
+await sbPost(“pedidos”,{
+ref: String(ref),
+cliente_id: STORE.clientId,
+cnpj: cl.cnpj, razao: cl.razao,
+itens: JSON.stringify(items.map(i=>({id:i.id,name:i.name,unit:i.unit,qty:i.qty,price:i.price,img:i.img}))),
+total: total,
+pagamento: cl.pagamento, prazo: cl.prazo||””, obs: cl.obs||””,
+});
+showToast(“✅ Pedido salvo no sistema!”);
+}
+setConfirmedItems([…items]);
+setConfirmedTotal(total);
+setDone(true);
+setView(“confirm”);
+setCart({});
+setQtys({});
+setTimeout(()=>gerarPDFData([…items], total), 600);
+}
+
+/* ── AUTH SCREEN ── */
+if(!loggedIn) return (
+<div style={{minHeight:“100vh”,background:”#1a56db”,display:“flex”,flexDirection:“column”,
+alignItems:“center”,justifyContent:“center”,padding:“20px”,
+fontFamily:”‘Inter’,system-ui,sans-serif”}}>
+<style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box;margin:0;padding:0} body{background:#1a56db;overflow-x:hidden} .auth-input::placeholder{color:rgba(255,255,255,0.35)} .auth-input:focus{border-color:#FFD000!important;outline:none;box-shadow:0 0 0 3px rgba(255,208,0,0.15)} .hbtn:hover{opacity:.85}`}</style>
+
+```
+  {/* Logo + Título */}
+  <Logo size={88}/>
+  <h1 style={{fontSize:36,fontWeight:900,color:"#fff",marginTop:14,marginBottom:6,letterSpacing:"-0.5px"}}>
+    Start Zero
+  </h1>
+  <p style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginBottom:28,textTransform:"uppercase",letterSpacing:2}}>
+    Portal de Pedidos B2B
+  </p>
+
+  {/* ── TELA SUCESSO CADASTRO ── */}
+  {registerSuccess ? (
+    <div style={{width:"100%",maxWidth:380,background:"#1340b0",borderRadius:18,
+      padding:"30px 24px",boxShadow:"0 16px 48px rgba(0,0,0,0.35)",textAlign:"center"}}>
+      <div style={{fontSize:56,marginBottom:10}}>🎉</div>
+      <div style={{fontSize:18,fontWeight:900,color:"#FFD000",marginBottom:6,
+        textTransform:"uppercase",letterSpacing:1}}>Cadastro Realizado!</div>
+      <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",marginBottom:18}}>
+        Bem-vindo(a) à Start Zero
+      </div>
+      <div style={{background:"rgba(255,255,255,0.08)",borderRadius:10,
+        padding:"12px 16px",marginBottom:22,textAlign:"left"}}>
+        {[["Empresa", welcomeName],["E-mail", STORE.profile.email||"–"],["WhatsApp", STORE.profile.celular||"–"]].map(([k,v])=>(
+          <div key={k} style={{display:"flex",justifyContent:"space-between",
+            fontSize:12,paddingBottom:6,marginBottom:6,
+            borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+            <span style={{color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:0.5}}>{k}</span>
+            <span style={{color:"#fff",fontWeight:600,textTransform:"uppercase",maxWidth:"60%",textAlign:"right"}}>{v}</span>
+          </div>
+        ))}
+      </div>
+      <button className="hbtn"
+        onClick={()=>{setRegisterSuccess(false);setLoggedIn(true);setView("complete");}}
+        style={{width:"100%",padding:"13px",background:"#FFD000",border:"none",
+          borderRadius:10,color:"#1340b0",fontWeight:800,fontSize:15,
+          cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>
+        Completar Cadastro →
+      </button>
+    </div>
+
+  /* ── TELA LOGIN ── */
+  ) : loginTab==="login" ? (
+    <div style={{width:"100%",maxWidth:380,background:"#1340b0",borderRadius:18,
+      padding:"28px 22px",boxShadow:"0 16px 48px rgba(0,0,0,0.35)"}}>
+      <h2 style={{fontSize:16,fontWeight:800,color:"#FFD000",textAlign:"center",
+        textTransform:"uppercase",letterSpacing:1.5,marginBottom:22}}>Acessar Conta</h2>
+      <div style={{marginBottom:14}}>
+        <label style={S.authLabel}>E-mail</label>
+        <input className="auth-input" type="email" value={loginData.email}
+          onChange={e=>{const v=e.target.value;setLoginData(d=>({...d,email:v}));checkMatch("email",v);}}
+          placeholder="seu@email.com" onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+          style={S.authInput}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,margin:"8px 0",
+        color:"rgba(255,255,255,0.3)",fontSize:12}}>
+        <div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/><span>ou</span>
+        <div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/>
+      </div>
+      <div style={{marginBottom:18}}>
+        <label style={S.authLabel}>WhatsApp</label>
+        <input className="auth-input" type="tel" value={loginData.whatsapp}
+          onChange={e=>{const v=e.target.value.replace(/\D/g,"").slice(0,11).replace(/(\d{2})(\d)/,"($1) $2").replace(/(\d{4,5})(\d{4})$/,"$1-$2");setLoginData(d=>({...d,whatsapp:v}));checkMatch("whatsapp",v);}}
+          placeholder="(00) 00000-0000" onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+          style={S.authInput}/>
+      </div>
+      <div style={{marginBottom:18,position:"relative"}}>
+        <label style={S.authLabel}>Senha *</label>
+        <input className="auth-input" type={showSenha?"text":"password"} value={loginData.senha}
+          onChange={e=>setLoginData(d=>({...d,senha:e.target.value}))}
+          placeholder="••••••" onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+          style={S.authInput}/>
+        <button onClick={()=>setShowSenha(s=>!s)}
+          style={{position:"absolute",right:10,top:26,background:"transparent",border:"none",
+            color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:14,padding:"2px"}}>
+          {showSenha?"🙈":"👁️"}
+        </button>
+      </div>
+      {loginMatch&&(
+        <div style={{background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.3)",
+          borderRadius:10,padding:"10px 14px",marginBottom:12,textAlign:"center"}}>
+          <div style={{fontSize:12,color:"#4ade80",fontWeight:700,marginBottom:4}}>
+            👋 Bem-vindo(a) de volta!
+          </div>
+          <div style={{fontSize:13,color:"#fff",fontWeight:700,textTransform:"uppercase",marginBottom:8}}>
+            {loginMatch.razao||""}
+          </div>
+          <button onClick={applyMatch}
+            style={{background:"#4ade80",border:"none",borderRadius:8,color:"#1340b0",
+              fontWeight:700,fontSize:12,padding:"6px 16px",cursor:"pointer",
+              fontFamily:"'Inter',sans-serif"}}>
+            ✅ Usar este cadastro
+          </button>
+        </div>
+      )}
+      {loginErr&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",marginBottom:12}}>{loginErr}</div>}
+      <button className="hbtn" onClick={handleLogin}
+        style={{width:"100%",padding:"13px",background:"#FFD000",border:"none",
+          borderRadius:10,color:"#1340b0",fontWeight:800,fontSize:15,
+          cursor:"pointer",fontFamily:"'Inter',sans-serif",marginBottom:14}}>
+        Entrar →
+      </button>
+      <div style={{textAlign:"center"}}>
+        {(STORE.registered||(STORE.profile&&STORE.profile.razao)) ? (
+          <span style={{fontSize:12,color:"rgba(255,255,255,0.35)"}}>🔒 Cadastro já realizado</span>
+        ) : (
+          <button onClick={()=>{setLoginTab("register");setLoginErr("");}}
+            style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.6)",
+              fontSize:13,cursor:"pointer",fontFamily:"'Inter',sans-serif",
+              textDecoration:"underline"}}>
+            Não tem conta? Cadastre-se
+          </button>
+        )}
+      </div>
+    </div>
+
+  /* ── TELA CADASTRO ── */
+  ) : (
+    <div style={{width:"100%",maxWidth:380,background:"#1340b0",borderRadius:18,
+      padding:"28px 22px",boxShadow:"0 16px 48px rgba(0,0,0,0.35)"}}>
+      <h2 style={{fontSize:16,fontWeight:800,color:"#FFD000",textAlign:"center",
+        textTransform:"uppercase",letterSpacing:1.5,marginBottom:22}}>Novo Cadastro</h2>
+      {[
+        {label:"Razão Social *",field:"nome",ph:"Farmácia Saúde Total Ltda.",type:"text"},
+        {label:"CNPJ",field:"cnpj",ph:"00.000.000/0000-00",type:"text"},
+        {label:"E-mail *",field:"email",ph:"contato@farmacia.com.br",type:"email"},
+        {label:"WhatsApp *",field:"whatsapp",ph:"(00) 00000-0000",type:"tel"},
+      ].map(({label,field,ph,type})=>(
+        <div key={field} style={{marginBottom:14}}>
+          <label style={{...S.authLabel,color:regErrors[field]?"#fca5a5":"#FFD000"}}>{label}</label>
+          <input className="auth-input" type={type} value={regData[field]}
+            onChange={e=>{
+              const raw = e.target.value;
+              const v = field==="whatsapp"
+                ? raw.replace(/\D/g,"").slice(0,11).replace(/(\d{2})(\d)/,"($1) $2").replace(/(\d{4,5})(\d{4})$/,"$1-$2")
+                : field==="cnpj" ? maskCnpj(raw) : raw;
+              setRegData(d=>({...d,[field]:v}));
+              if(regErrors[field]) setRegErrors(er=>({...er,[field]:undefined}));
+              if(field==="cnpj"){
+                const digits = v.replace(/\D/g,"");
+                if(digits.length===14 && STORE.registeredCNPJ && STORE.registeredCNPJ===digits)
+                  setRegErrors(er=>({...er,cnpj:"Este CNPJ já possui cadastro. Faça login."}));
+              }
+            }}
+            placeholder={ph}
+            style={{...S.authInput,
+              textTransform:field==="email"?"lowercase":"uppercase",
+              borderColor:regErrors[field]?"#fca5a5":"rgba(255,255,255,0.25)",
+              boxShadow:regErrors[field]?"0 0 0 2px rgba(252,165,165,0.2)":"none"
+            }}/>
+          {regErrors[field]&&(
+            <div style={{fontSize:11,color:"#fca5a5",marginTop:4,textAlign:"center"}}>
+              ⚠ {regErrors[field]}
+            </div>
+          )}
+        </div>
+      ))}
+      <div style={{marginBottom:14,position:"relative"}}>
+        <label style={{...S.authLabel,color:regErrors.senha?"#fca5a5":"#FFD000"}}>Senha *</label>
+        <input className="auth-input" type={showSenhaReg?"text":"password"} value={regData.senha}
+          onChange={e=>{setRegData(d=>({...d,senha:e.target.value}));if(regErrors.senha)setRegErrors(er=>({...er,senha:undefined}));}}
+          placeholder="Mínimo 6 caracteres"
+          style={{...S.authInput,borderColor:regErrors.senha?"#fca5a5":"rgba(255,255,255,0.25)"}}/>
+        <button onClick={()=>setShowSenhaReg(s=>!s)}
+          style={{position:"absolute",right:10,top:26,background:"transparent",border:"none",
+            color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:14,padding:"2px"}}>
+          {showSenhaReg?"🙈":"👁️"}
+        </button>
+        {regErrors.senha&&<div style={{fontSize:11,color:"#fca5a5",marginTop:4,textAlign:"center"}}>⚠ {regErrors.senha}</div>}
+      </div>
+      <div style={{marginBottom:14,position:"relative"}}>
+        <label style={{...S.authLabel,color:regErrors.confirmSenha?"#fca5a5":"#FFD000"}}>Confirmar Senha *</label>
+        <input className="auth-input" type={showConfirmSenha?"text":"password"} value={regData.confirmSenha}
+          onChange={e=>{setRegData(d=>({...d,confirmSenha:e.target.value}));if(regErrors.confirmSenha)setRegErrors(er=>({...er,confirmSenha:undefined}));}}
+          placeholder="Repita a senha"
+          style={{...S.authInput,borderColor:regErrors.confirmSenha?"#fca5a5":"rgba(255,255,255,0.25)"}}/>
+        <button onClick={()=>setShowConfirmSenha(s=>!s)}
+          style={{position:"absolute",right:10,top:26,background:"transparent",border:"none",
+            color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:14,padding:"2px"}}>
+          {showConfirmSenha?"🙈":"👁️"}
+        </button>
+        {regErrors.confirmSenha&&<div style={{fontSize:11,color:"#fca5a5",marginTop:4,textAlign:"center"}}>⚠ {regErrors.confirmSenha}</div>}
+      </div>
+      <button className="hbtn" onClick={handleRegister}
+        style={{width:"100%",padding:"13px",background:"#FFD000",border:"none",
+          borderRadius:10,color:"#1340b0",fontWeight:800,fontSize:15,
+          cursor:"pointer",fontFamily:"'Inter',sans-serif",marginBottom:14}}>
+        💾 Salvar Cadastro
+      </button>
+      <div style={{textAlign:"center"}}>
+        <button onClick={()=>{setLoginTab("login");setLoginErr("");}}
+          style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.6)",
+            fontSize:13,cursor:"pointer",fontFamily:"'Inter',sans-serif",textDecoration:"underline"}}>
+          Já tem conta? Fazer Login
+        </button>
+      </div>
+    </div>
+  )}
+</div>
+```
+
+);
+
+/* ── MAIN APP ── */
+return (
+<div style={S.root}>
+<style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box;margin:0;padding:0}body{background:#1a56db;max-width:100vw;overflow-x:hidden} input,select,textarea{font-family:'Inter',sans-serif;outline:none} input::placeholder,textarea::placeholder{color:rgba(255,255,255,0.4)} .hcard:hover{box-shadow:0 6px 24px rgba(0,0,0,.3);border-color:#FFD000!important;transform:translateY(-2px)} .hbtn:hover{opacity:.85} @keyframes cb{0%,100%{transform:scale(1)}40%{transform:scale(1.28)}75%{transform:scale(.92)}} @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}} .fi{animation:fi .3s ease forwards} select option{background:#1a56db;color:#fff} @media print{body{-webkit-print-color-adjust:exact;}} input:focus,select:focus,textarea:focus{border-color:#FFD000!important;box-shadow:0 0 0 2px rgba(255,208,0,0.2)}`}</style>
+
+```
+  {/* HEADER */}
+  {/* Toast notification */}
+  {toastMsg&&<div style={{position:"fixed",top:80,left:"50%",transform:"translateX(-50%)",background:"#1340b0",border:"1px solid #4ade80",color:"#4ade80",padding:"10px 20px",borderRadius:10,zIndex:9999,fontWeight:600,fontSize:13,boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>{toastMsg}</div>}
+  {/* Loading overlay */}
+  {loading&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998}}><div style={{background:"#1340b0",borderRadius:12,padding:"24px 32px",textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>⏳</div><div style={{color:"#fff",fontWeight:600}}>Aguarde...</div></div></div>}
+  <header style={S.hdr}>
+    <div style={S.logoWrap}><Logo size={52}/></div>
+    <div style={S.hdrCenter}>
+      Start Zero
+      {welcomeName ? <div style={{fontSize:11,fontWeight:600,color:"#FFD000",marginTop:2,letterSpacing:0.3}}>Olá, {welcomeName.toUpperCase()}! 👋</div> : <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>Portal de Pedidos B2B</div>}
+    </div>
+    <button style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer",padding:"4px 8px",fontFamily:"'Inter',sans-serif"}}
+      onClick={()=>{setLoggedIn(false);}}>
+      SAIR
+    </button>
+    <button style={{...S.cartBtn,animation:anim?"cb .6s ease":"none"}} onClick={()=>setView(view==="cart"?"catalog":"cart")}>
+      🛒{items.length>0&&<span style={S.badge}>{items.length}</span>}
+    </button>
+  </header>
+
+  {/* NAV */}
+  {view!=="complete"&&<nav style={S.nav}>
+    {[["client",`Dados do Cliente${required?" ✓":""}`],["catalog","Catálogo"],["cart",`Pedido${items.length>0?` (${items.length})`:""}`],["history",`Meus Pedidos${orderHistory.length>0?" ("+orderHistory.length+")":""}`]].map(([v,l])=>(
+      <button key={v} style={{...S.navBtn,...(view===v?S.navOn:{})}} onClick={()=>setView(v)}>{l}</button>
+    ))}
+  </nav>}
+
+  <main style={S.main}>
+
+    {/* COMPLETAR CADASTRO */}
+    {view==="complete"&&(
+      <div style={S.formView} className="fi">
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:40,marginBottom:8}}>📋</div>
+          <h2 style={{...S.pageTitle,marginBottom:6}}>Complete seu Cadastro</h2>
+          <p style={{fontSize:13,color:"rgba(255,255,255,0.6)"}}>Preencha os dados abaixo para finalizar e fazer seus pedidos</p>
+        </div>
+
+        <Sec title="Dados Fiscais">
+          <Row>
+            <Fld label="Razão Social *" flex={2} err={formErrors.razao}><FI value={cl.razao} err={formErrors.razao} onChange={v=>upd("razao",v)} ph="Farmácia Saúde Total Ltda." list="dl-razao"/></Fld>
+            <Fld label="CNPJ *" flex={1} err={formErrors.cnpj}><FI value={cl.cnpj} err={formErrors.cnpj} onChange={v=>upd("cnpj",maskCnpj(v))} ph="00.000.000/0000-00"/></Fld>
+          </Row>
+          <Row>
+            <Fld label="Inscrição Estadual *" flex={1} err={formErrors.ie}><FI value={cl.ie} err={formErrors.ie} onChange={v=>upd("ie",v)} ph="Ex: 000.000.000.000"/></Fld>
+            <Fld label="Responsável" flex={2}><FI value={cl.contato} onChange={v=>upd("contato",v)} ph="João Silva"/></Fld>
+          </Row>
+        </Sec>
+
+        <Sec title="Contatos">
+          <Row>
+            <Fld label="E-mail *" flex={2} err={formErrors.email}><FI value={cl.email} err={formErrors.email} onChange={v=>upd("email",v)} ph="contato@farmacia.com.br" type="email" list="dl-email"/></Fld>
+            <Fld label="E-mail para XML *" flex={2} err={formErrors.emailXml}><FI value={cl.emailXml} err={formErrors.emailXml} onChange={v=>upd("emailXml",v)} ph="nfe@farmacia.com.br" type="email" list="dl-emailXml"/></Fld>
+            <Fld label="Telefone" flex={1}><FI value={cl.telefone} onChange={v=>upd("telefone",maskPhone(v))} ph="(00) 0000-0000"/></Fld>
+            <Fld label="Celular / WhatsApp *" flex={1}><FI value={cl.celular} onChange={v=>upd("celular",maskPhone(v))} ph="(00) 00000-0000"/></Fld>
+          </Row>
+        </Sec>
+
+        <Sec title="Endereço de Entrega">
+          <Row>
+            <Fld label="Logradouro *" flex={3} err={formErrors.logradouro}><FI value={cl.logradouro} err={formErrors.logradouro} onChange={v=>upd("logradouro",v)} ph="Rua, Av., Travessa…" list="dl-logradouro"/></Fld>
+            <Fld label="Número" flex={1}><FI value={cl.numero} onChange={v=>upd("numero",v)} ph="123"/></Fld>
+          </Row>
+          <Row>
+            <Fld label="Complemento"><FI value={cl.complemento} onChange={v=>upd("complemento",v)} ph="Sala, Loja…" list="dl-complemento"/></Fld>
+            <Fld label="Bairro"><FI value={cl.bairro} onChange={v=>upd("bairro",v)} ph="Centro" list="dl-bairro"/></Fld>
+            <Fld label="CEP *" flex={1} err={formErrors.cep}>
+              <FI value={cl.cep} onChange={v=>{const m=maskCep(v);upd("cep",m);if(m.replace(/\D/g,"").length===8)aplicarCep(m);else setCepMsg(null);}} ph="00000-000" list="dl-cep"/>
+              {cepMsg&&<div style={{fontSize:11,marginTop:4,padding:"4px 8px",borderRadius:6,textAlign:"center",color:cepMsg.type==="ok"?"#4ade80":"#fca5a5",background:cepMsg.type==="ok"?"rgba(74,222,128,0.1)":"rgba(252,165,165,0.1)",border:`1px solid ${cepMsg.type==="ok"?"rgba(74,222,128,0.3)":"rgba(252,165,165,0.3)"}`}}>{cepMsg.text}</div>}
+            </Fld>
+          </Row>
+          <Row>
+            <Fld label="Cidade *" err={formErrors.cidade}><FI value={cl.cidade} err={formErrors.cidade} onChange={v=>upd("cidade",v)} ph="São Paulo" list="dl-cidade"/></Fld>
+            <Fld label="Estado *" err={formErrors.estado}><FS value={cl.estado} onChange={v=>upd("estado",v)}><option value="">UF</option>{UFS.map(u=><option key={u} value={u}>{u}</option>)}</FS></Fld>
+          </Row>
+        </Sec>
+
+        <Sec title="Pagamento">
+          <Row>
+            <Fld label="Forma de Pagamento *" flex={2}><FS value={cl.pagamento} onChange={v=>upd("pagamento",v)}>{PGTOS.map(p=><option key={p} value={p}>{p}</option>)}</FS></Fld>
+            <Fld label="Prazo Negociado" flex={1}><FI value={cl.prazo} onChange={v=>upd("prazo",v)} ph="Ex: 30 dias"/></Fld>
+          </Row>
+          <Row>
+            <Fld label="Observações" flex={1}>
+              <textarea value={cl.obs} onChange={e=>upd("obs",e.target.value)} placeholder="Instruções de entrega, horário, referências…" rows={3} style={{...S.finput,resize:"vertical",height:"auto",textAlign:"left"}}/>
+            </Fld>
+          </Row>
+        </Sec>
+
+        <button className="hbtn" style={S.primBtn} onClick={()=>{
+          if(!validateClient()){return;}
+          // Save complete profile to STORE
+          STORE.profile = {...STORE.profile, ...cl};
+          setView("catalog");
+        }}>
+          💾 Salvar e Acessar o Catálogo →
+        </button>
+      </div>
+    )}
+
+            {/* CATÁLOGO */}
+    {view==="catalog"&&(
+      <div className="fi">
+        <div style={S.searchRow}>
+          <div style={S.searchBox}>
+            <span style={{color:"rgba(255,255,255,0.5)",marginRight:8}}>🔍</span>
+            <input style={S.searchIn} placeholder="Buscar produto…" value={search} onChange={e=>setSearch(e.target.value)}/>
+            {search&&<button style={S.clrBtn} onClick={()=>setSearch("")}>✕</button>}
+          </div>
+          <div style={S.chips}>
+            {brands.map(b=><button key={b} className="hbtn" style={{...S.chip,...(brand===b?S.chipOn:{})}} onClick={()=>setBrand(b)}>{b}</button>)}
+          </div>
+        </div>
+        <div style={S.grid}>
+          {list.map((p,i)=>(
+            <div key={p.id} className="hcard fi" style={{...S.card,animationDelay:`${i*45}ms`}}>
+              {p.tag&&<span style={{...S.tag,background:TAGS[p.tag]?.bg,color:TAGS[p.tag]?.tx}}>{p.tag}</span>}
+              <div style={{fontSize:28,marginBottom:2}}>{p.img}</div>
+              <div style={S.cBrand}>{p.brand}</div>
+              <div style={S.cName}>{p.name}</div>
+              <div style={S.cUnit}>{p.unit}</div>
+              <div style={S.cDesc}>{p.desc}</div>
+              <div style={S.cBot}>
+                <div><div style={S.cPrice}>R$ {fmt(p.price)}</div><div style={S.cMin}>mín. {p.minQty} un.</div></div>
+                {cart[p.id]
+                  ?<div style={S.qC}><button style={S.qB} onClick={()=>setQ(p.id,getQ(p.id)-1)}>−</button><span style={S.qN}>{getQ(p.id)}</span><button style={S.qB} onClick={()=>setQ(p.id,getQ(p.id)+1)}>+</button></div>
+                  :<button className="hbtn" style={S.addBtn} onClick={()=>addCart(p.id)}>+ Adicionar</button>
+                }
+              </div>
+              <div style={S.stLine}><span style={{...S.stDot,background:p.stock>100?C.green:"#f59e0b"}}/><span style={S.stTxt}>{p.stock>100?"Em estoque":`Apenas ${p.stock} un.`}</span></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* DADOS DO CLIENTE */}
+    {view==="client"&&(
+      <div style={S.formView} className="fi">
+        <h2 style={S.pageTitle}>Dados do Cliente</h2>
+
+        <Sec title="Dados Fiscais">
+          <Row>
+            <Fld label="CNPJ *" flex={1} err={formErrors.cnpj}><FI value={cl.cnpj} err={formErrors.cnpj} onChange={v=>upd("cnpj",maskCnpj(v))} ph="00.000.000/0000-00"/></Fld>
+            <Fld label="Inscrição Estadual *" flex={1} err={formErrors.ie}><FI value={cl.ie} err={formErrors.ie} onChange={v=>upd("ie",v)} ph="Ex: 000.000.000.000"/></Fld>
+          </Row>
+          <Row>
+            <Fld label="Razão Social *" flex={2} err={formErrors.razao}><FI value={cl.razao} err={formErrors.razao} onChange={v=>upd("razao",v)} ph="Farmácia Saúde Total Ltda." list="dl-razao"/></Fld>
+          </Row>
+          <Row center>
+            <Fld label="Responsável" flex={1} style={{maxWidth:300}}><FI value={cl.contato} onChange={v=>upd("contato",v)} ph="João Silva"/></Fld>
+          </Row>
+        </Sec>
+
+        <Sec title="Contatos">
+          <Row>
+            <Fld label="E-mail *" flex={2} err={formErrors.email}><FI value={cl.email} err={formErrors.email} onChange={v=>upd("email",v)} ph="contato@farmacia.com.br" type="email" list="dl-email"/></Fld>
+            <Fld label="E-mail para XML *" flex={2} err={formErrors.emailXml}><FI value={cl.emailXml} err={formErrors.emailXml} onChange={v=>upd("emailXml",v)} ph="nfe@farmacia.com.br" type="email" list="dl-emailXml"/></Fld>
+            <Fld label="Telefone *" flex={1} err={formErrors.telefone}><FI value={cl.telefone} err={formErrors.telefone} onChange={v=>upd("telefone",maskPhone(v))} ph="(00) 0000-0000"/></Fld>
+            <Fld label="Celular / WhatsApp" flex={1}><FI value={cl.celular} onChange={v=>upd("celular",maskPhone(v))} ph="(00) 00000-0000"/></Fld>
+          </Row>
+        </Sec>
+
+        <Sec title="Endereço de Entrega">
+          <Row>
+            <Fld label="Logradouro *" flex={3} err={formErrors.logradouro}><FI value={cl.logradouro} err={formErrors.logradouro} onChange={v=>upd("logradouro",v)} ph="Rua, Av., Travessa…" list="dl-logradouro"/></Fld>
+            <Fld label="Número" flex={1}><FI value={cl.numero} onChange={v=>upd("numero",v)} ph="123"/></Fld>
+          </Row>
+          <Row>
+            <Fld label="Complemento"><FI value={cl.complemento} onChange={v=>upd("complemento",v)} ph="Sala, Loja…" list="dl-complemento"/></Fld>
+            <Fld label="Bairro"><FI value={cl.bairro} onChange={v=>upd("bairro",v)} ph="Centro" list="dl-bairro"/></Fld>
+            <Fld label="CEP *" flex={1} err={formErrors.cep}>
+              <FI value={cl.cep} onChange={v=>{const m=maskCep(v);upd("cep",m);if(m.replace(/\D/g,"").length===8)aplicarCep(m);else setCepMsg(null);}} ph="00000-000" list="dl-cep"/>
+              {cepMsg&&<div style={{fontSize:11,marginTop:4,padding:"4px 8px",borderRadius:6,textAlign:"center",color:cepMsg.type==="ok"?C.green:C.red,background:cepMsg.type==="ok"?"rgba(74,222,128,0.1)":"rgba(252,165,165,0.1)",border:`1px solid ${cepMsg.type==="ok"?"rgba(74,222,128,0.3)":"rgba(252,165,165,0.3)"}`}}>{cepMsg.text}</div>}
+            </Fld>
+          </Row>
+          <Row>
+            <Fld label="Cidade *" err={formErrors.cidade}><FI value={cl.cidade} err={formErrors.cidade} onChange={v=>upd("cidade",v)} ph="São Paulo" list="dl-cidade"/></Fld>
+            <Fld label="Estado *" err={formErrors.estado}><FS value={cl.estado} onChange={v=>upd("estado",v)}><option value="">UF</option>{UFS.map(u=><option key={u} value={u}>{u}</option>)}</FS></Fld>
+          </Row>
+        </Sec>
+
+        <Sec title="Pagamento">
+          <Row>
+            <Fld label="Forma de Pagamento *" flex={2}><FS value={cl.pagamento} onChange={v=>upd("pagamento",v)}>{PGTOS.map(p=><option key={p} value={p}>{p}</option>)}</FS></Fld>
+            <Fld label="Prazo Negociado" flex={1}><FI value={cl.prazo} onChange={v=>upd("prazo",v)} ph="Ex: 30 dias"/></Fld>
+          </Row>
+          <Row>
+            <Fld label="Observações" flex={1}>
+              <textarea value={cl.obs} onChange={e=>upd("obs",e.target.value)} placeholder="Instruções de entrega, horário, referências…" rows={3} style={{...S.finput,resize:"vertical",height:"auto",textAlign:"left"}}/>
+            </Fld>
+          </Row>
+        </Sec>
+
+        <button className="hbtn" style={S.primBtn} onClick={()=>setView("cart")}>Salvar e Ver Pedido →</button>
+      </div>
+    )}
+
+    {/* CARRINHO */}
+    {view==="cart"&&!done&&(
+      <div style={S.cartView} className="fi">
+        <h2 style={S.pageTitle}>Resumo do Pedido</h2>
+        {items.length===0
+          ?<div style={S.empty}><div style={{fontSize:52}}>🛒</div><p style={{color:C.sub,marginTop:12}}>Seu pedido está vazio.</p><button className="hbtn" style={S.ghostBtn} onClick={()=>setView("catalog")}>← Ver Catálogo</button></div>
+          :<>
+            <div style={S.ciList}>
+              {items.map(it=>(
+                <div key={it.id} style={S.ci}>
+                  <div style={{fontSize:28,flexShrink:0}}>{it.img}</div>
+                  <div style={{flex:1,minWidth:0}}><div style={S.ciName}>{it.name}</div><div style={S.ciMeta}>{it.unit} · {it.brand}</div></div>
+                  <div style={S.ciRight}>
+                    <div style={S.qC}><button style={S.qB} onClick={()=>setQ(it.id,getQ(it.id)-1)}>−</button><span style={S.qN}>{getQ(it.id)}</span><button style={S.qB} onClick={()=>setQ(it.id,getQ(it.id)+1)}>+</button></div>
+                    <div style={S.ciTotal}>R$ {fmt(it.qty*it.price)}</div>
+                    <button style={S.rem} onClick={()=>remCart(it.id)}>✕ remover</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {required
+              ?<div style={S.clCard}>
+                <div style={S.clCardTop}><span style={S.clCardTitle}>📋 Dados do Cliente</span><button style={S.editBtn} onClick={()=>setView("client")}>✏️ Editar</button></div>
+                <div style={S.clGrid}>
+                  {[["Razão Social",cl.razao],["CNPJ",cl.cnpj],["E-mail",cl.email],["Telefone",cl.telefone||cl.celular],
+                    ["Endereço",`${cl.logradouro}${cl.numero?", "+cl.numero:""}${cl.bairro?" – "+cl.bairro:""} – ${cl.cidade}/${cl.estado}`],
+                    ["CEP",cl.cep],["Forma de Pgto.",cl.pagamento],["Prazo",cl.prazo||"–"],
+                  ].filter(([,v])=>v).map(([k,v])=>(
+                    <div key={k} style={S.clRow}><span style={S.clKey}>{k}</span><span style={S.clVal}>{v}</span></div>
+                  ))}
+                </div>
+              </div>
+              :<div style={S.warnBox}><span>⚠️ Preencha os <strong>Dados do Cliente</strong> para confirmar.</span><button className="hbtn" style={S.warnBtn} onClick={()=>setView("client")}>Preencher →</button></div>
+            }
+            <div style={S.summ}>
+              {[["Itens",`${count} unidades`],["Frete",total>=300?"Grátis 🎉":"A calcular"],["Entrega","3–5 dias úteis"]].map(([k,v])=>(
+                <div key={k} style={S.sRow}><span style={{color:C.sub}}>{k}</span><span style={{color:k==="Frete"&&total>=300?C.green:k==="Entrega"?"#FFD000":C.text}}>{v}</span></div>
+              ))}
+              <div style={S.sDivider}/>
+              <div style={{...S.sRow,fontSize:18,fontWeight:800}}><span>Total do Pedido</span><span style={{color:"#FFD000"}}>R$ {fmt(total)}</span></div>
+              {total<300&&<div style={S.tip}>💡 Faltam R$ {fmt(300-total)} para frete grátis!</div>}
+              <button className="hbtn" style={{...S.primBtn,marginTop:20,opacity:required?1:.4}} onClick={handleOrder}>Confirmar Pedido →</button>
+            </div>
+          </>
+        }
+      </div>
+    )}
+
+    {/* CONFIRMAÇÃO */}
+    {view==="confirm"&&(
+      <div style={S.confWrap} className="fi">
+        <div style={S.confBox}>
+          <Logo size={72}/><div style={S.confCo}>CNPJ 24.453.519/0001-93</div>
+          <div style={{fontSize:46,margin:"14px 0 4px"}}>✅</div>
+          <h2 style={S.confTitle}>Pedido Confirmado!</h2>
+          <p style={S.confTxt}>Seu pedido foi registrado. Nossa equipe entrará em contato para confirmar entrega e pagamento.</p>
+
+          {/* ── ESPELHO DO PEDIDO ── */}
+          <div style={{...S.confDets,marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#FFD000",textAlign:"center",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>📋 Dados do Cliente</div>
+            {[["Protocolo",`#${ref}`],["Razão Social",cl.razao||"–"],["CNPJ",cl.cnpj||"–"],
+              ["E-mail",cl.email||"–"],["E-mail XML",cl.emailXml||"–"],["Telefone",cl.telefone||cl.celular||"–"],
+              ["Endereço",cl.logradouro?`${cl.logradouro}${cl.numero?", "+cl.numero:""}${cl.bairro?" – "+cl.bairro:""} – ${cl.cidade}/${cl.estado}`:"–"],
+              ["CEP",cl.cep||"–"],["Forma de Pgto.",cl.pagamento],["Prazo",cl.prazo||"A combinar"],
+            ].map(([k,v])=>(
+              <div key={k} style={S.confRow}><span style={{color:C.sub,fontSize:11,textTransform:"uppercase"}}>{k}</span><span style={{color:"#fff",fontWeight:500,fontSize:12,textAlign:"right",maxWidth:"60%",textTransform:"uppercase"}}>{v}</span></div>
+            ))}
+            {cl.obs&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.1)",fontSize:11,color:C.sub}}><strong style={{color:"#FFD000"}}>Obs.:</strong> {cl.obs}</div>}
+          </div>
+
+          <div style={{...S.confDets,marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#FFD000",textAlign:"center",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>🛒 Itens do Pedido</div>
+            {confirmedItems.map((it,i)=>(
+              <div key={i} style={{...S.confRow,alignItems:"center"}}>
+                <span style={{color:"#fff",fontSize:12,flex:1,textTransform:"uppercase"}}>{it.img} {it.name}</span>
+                <span style={{color:C.sub,fontSize:11,marginLeft:8}}>{it.qty}x</span>
+                <span style={{color:"#FFD000",fontWeight:700,fontSize:12,marginLeft:8}}>R$ {fmt(it.qty*it.price)}</span>
+              </div>
+            ))}
+            <div style={{borderTop:"1px solid rgba(255,255,255,0.15)",marginTop:8,paddingTop:8,display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"#fff",fontWeight:700,fontSize:13}}>Total</span>
+              <span style={{color:"#FFD000",fontWeight:800,fontSize:15}}>R$ {fmt(confirmedTotal)}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+              <span style={{color:C.sub,fontSize:11}}>Entrega</span>
+              <span style={{color:"#4ade80",fontSize:11}}>3–5 dias úteis</span>
+            </div>
+          </div>
+
+          {/* ── BOTÕES ── */}
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <button className="hbtn" style={{...S.primBtn,background:"#e53e3e",color:"#fff"}} onClick={gerarPDF}>
+              📄 Gerar PDF do Pedido
+            </button>
+            <button className="hbtn" style={{...S.primBtn,background:"#FFD000",color:"#1340b0"}}
+              onClick={()=>{setEmailDestino(cl.email||"");setShowEmailDialog(true);}}>
+              📧 Enviar por E-mail
+            </button>
+            <button className="hbtn" style={S.primBtn}
+              onClick={()=>{setDone(false);setConfirmedItems([]);setConfirmedTotal(0);setView("catalog");}}>
+              Fazer Novo Pedido
+            </button>
+          </div>
+
+          {/* Email Dialog */}
+          {showEmailDialog&&(
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+              <div style={{background:"#1340b0",borderRadius:16,padding:"28px 24px",width:"100%",maxWidth:360,boxShadow:"0 12px 40px rgba(0,0,0,0.4)"}}>
+                <h3 style={{color:"#FFD000",fontSize:16,fontWeight:800,textAlign:"center",marginBottom:6,textTransform:"uppercase"}}>Enviar por E-mail</h3>
+                <p style={{color:"rgba(255,255,255,0.6)",fontSize:12,textAlign:"center",marginBottom:18}}>Digite o e-mail para envio do espelho do pedido</p>
+                <label style={{...S.authLabel,marginBottom:6}}>E-mail</label>
+                <input type="email" value={emailDestino}
+                  onChange={e=>setEmailDestino(e.target.value)}
+                  placeholder="destinatario@email.com"
+                  style={{...S.authInput,marginBottom:16,width:"100%"}}
+                  onKeyDown={e=>{if(e.key==="Enter"){enviarEmailPara(emailDestino);setShowEmailDialog(false);}}}
+                />
+                <div style={{display:"flex",gap:10}}>
+                  <button className="hbtn"
+                    style={{flex:1,padding:"11px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}
+                    onClick={()=>setShowEmailDialog(false)}>
+                    Cancelar
+                  </button>
+                  <button className="hbtn"
+                    style={{flex:1,padding:"11px",background:"#FFD000",border:"none",borderRadius:10,color:"#1340b0",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}
+                    onClick={()=>{enviarEmailPara(emailDestino);setShowEmailDialog(false);}}>
+                    Enviar →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+  </main>
+
+    {/* MEUS PEDIDOS */}
+    {view==="history"&&(
+      <div style={S.cartView} className="fi">
+        <h2 style={S.pageTitle}>Meus Pedidos</h2>
+        {orderHistory.length===0
+          ?<div style={S.empty}>
+              <div style={{fontSize:52}}>📦</div>
+              <p style={{color:C.sub,marginTop:12}}>Nenhum pedido realizado ainda.</p>
+              <button className="hbtn" style={S.ghostBtn} onClick={()=>setView("catalog")}>← Ver Catálogo</button>
+            </div>
+          :<div style={{display:"flex",flexDirection:"column",gap:14}}>
+            {orderHistory.map((o,i)=>(
+              <div key={i} style={{background:"#1340b0",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:18}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:800,color:"#FFD000"}}>Pedido #{o.ref}</div>
+                    <div style={{fontSize:11,color:C.sub,marginTop:2}}>{o.data} às {o.hora}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:16,fontWeight:800,color:"#FFD000"}}>R$ {o.total.toFixed(2).replace(".",",")}</div>
+                    <div style={{fontSize:10,color:"#4ade80",marginTop:2}}>✅ Confirmado</div>
+                  </div>
+                </div>
+                <div style={{borderTop:"1px solid rgba(255,255,255,0.1)",paddingTop:10,marginBottom:8}}>
+                  <div style={{fontSize:11,color:C.sub,marginBottom:6}}>CLIENTE: <span style={{color:"#fff",fontWeight:600}}>{o.cliente}</span></div>
+                  <div style={{fontSize:11,color:C.sub,marginBottom:6}}>CNPJ: <span style={{color:"#fff"}}>{o.cnpj}</span></div>
+                  <div style={{fontSize:11,color:C.sub,marginBottom:8}}>PAGAMENTO: <span style={{color:"#fff"}}>{o.pagamento}</span></div>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    {o.itens.map((it,j)=>(
+                      <div key={j} style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                        <span style={{color:"#fff"}}>{it.img} {it.name} x{it.qty}</span>
+                        <span style={{color:"#FFD000",fontWeight:600}}>R$ {(it.qty*it.price).toFixed(2).replace(".",",")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button className="hbtn"
+                  style={{width:"100%",padding:"9px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Inter',sans-serif"}}
+                  onClick={()=>{
+                    const linhaItens = o.itens.map(it=>it.name+" - Qtd: "+it.qty+" - R$ "+(it.qty*it.price).toFixed(2).replace(".",",")).join("\n");
+                    const texto = "PEDIDO #"+o.ref+"\nData: "+o.data+" as "+o.hora+"\n\nCLIENTE: "+o.cliente+"\nCNPJ: "+o.cnpj+"\nPAGAMENTO: "+o.pagamento+"\n\nITENS\n"+linhaItens+"\n\nTOTAL: R$ "+o.total.toFixed(2).replace(".",",")+"\n\nStart Zero - CNPJ 24.453.519/0001-93";
+                    window.open("mailto:?subject="+encodeURIComponent("Pedido #"+o.ref+" - "+o.cliente)+"&body="+encodeURIComponent(texto));
+                  }}>
+                  📧 Reenviar por E-mail
+                </button>
+              </div>
+            ))}
+          </div>
+        }
+      </div>
+    )}
+
+        {view==="catalog"&&items.length>0&&(
+    <div style={S.sticky}>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <Logo size={36}/>
+        <div><div style={{fontSize:11,color:C.sub}}>{items.length} produto(s)</div><div style={{fontSize:17,fontWeight:800,color:"#FFD000"}}>R$ {fmt(total)}</div></div>
+      </div>
+      <button className="hbtn" style={S.primBtn} onClick={()=>setView("cart")}>Ver Pedido →</button>
+    </div>
+  )}
+
+  <footer style={S.footer}><Logo size={26}/><span style={S.footTxt}>START ZERO · CNPJ 24.453.519/0001-93</span></footer>
+</div>
+```
+
+);
+}
+
+function Sec({title,children}){return(<div style={{marginBottom:28}}><div style={{textAlign:“center”,marginBottom:14}}><span style={{fontSize:13,fontWeight:700,color:”#FFD000”,textTransform:“uppercase”,letterSpacing:2}}>{title}</span></div>{children}</div>);}
+function Row({children,center}){return <div style={{display:“flex”,gap:12,flexWrap:“wrap”,marginBottom:12,justifyContent:center?“center”:“flex-start”}}>{children}</div>;}
+function Fld({label,children,flex=1,err}){return(<div style={{flex,minWidth:140}}><label style={{fontSize:11,fontWeight:700,color:err?”#fca5a5”:”#FFD000”,display:“block”,marginBottom:5,textTransform:“uppercase”,letterSpacing:.4,textAlign:“center”}}>{label}</label>{children}{err&&<div style={{fontSize:10,color:”#fca5a5”,marginTop:3,textAlign:“center”}}>⚠ {err}</div>}</div>);}
+function FI({value,onChange,ph,type=“text”,err,list}){return <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} list={list} autoComplete={list?“off”:undefined} style={{…S.finput,…(err?{borderColor:”#fca5a5”,boxShadow:“0 0 0 2px rgba(252,165,165,0.2)”}:{})}}/>;}
+function FS({value,onChange,children}){return <select value={value} onChange={e=>onChange(e.target.value)} style={S.finput}>{children}</select>;}
+
+const S = {
+authLabel:{fontSize:11,fontWeight:700,color:”#FFD000”,textTransform:“uppercase”,letterSpacing:1,display:“block”,textAlign:“center”,marginBottom:6},
+authInput:{width:“100%”,background:“rgba(255,255,255,0.1)”,border:“1px solid rgba(255,255,255,0.25)”,borderRadius:8,padding:“10px 12px”,color:”#fff”,fontSize:13,textAlign:“center”,fontFamily:”‘Inter’,sans-serif”,textTransform:“uppercase”},
+root:{minHeight:“100vh”,background:”#1a56db”,color:”#fff”,fontFamily:”‘Inter’,system-ui,sans-serif”},
+hdr:{position:“sticky”,top:0,zIndex:100,background:”#1a56db”,borderBottom:“1px solid rgba(255,255,255,0.15)”,padding:“10px 16px”,display:“flex”,alignItems:“center”,justifyContent:“space-between”,boxShadow:“0 2px 8px rgba(0,0,0,.15)”},
+logoWrap:{display:“flex”,alignItems:“center”,flexShrink:0},
+hdrCenter:{flex:1,textAlign:“center”,fontWeight:900,fontSize:24,color:”#fff”,letterSpacing:”-0.3px”},
+nav:{background:”#1340b0”,borderBottom:“1px solid rgba(255,255,255,0.15)”,padding:“0 8px”,display:“flex”,gap:0,position:“sticky”,top:68,zIndex:90,overflowX:“auto”},
+navBtn:{padding:“11px 10px”,background:“transparent”,border:“none”,color:“rgba(255,255,255,0.65)”,fontSize:12,cursor:“pointer”,borderBottom:“3px solid transparent”,fontFamily:”‘Inter’,sans-serif”,fontWeight:500,transition:“all .2s”,whiteSpace:“nowrap”},
+navOn:{color:”#FFD000”,borderBottom:“3px solid #FFD000”,fontWeight:700},
+main:{padding:“16px”,paddingBottom:120,maxWidth:1080,margin:“0 auto”,width:“100%”},
+searchRow:{marginBottom:18,textAlign:“center”},
+searchBox:{display:“flex”,alignItems:“center”,background:“rgba(255,255,255,0.08)”,border:“1px solid rgba(255,255,255,0.2)”,borderRadius:10,padding:“10px 14px”,marginBottom:10},
+searchIn:{flex:1,background:“transparent”,border:“none”,color:”#fff”,fontSize:14,fontFamily:”‘Inter’,sans-serif”},
+clrBtn:{background:“transparent”,border:“none”,color:“rgba(255,255,255,0.5)”,cursor:“pointer”,fontSize:13},
+chips:{display:“flex”,gap:8,flexWrap:“nowrap”,justifyContent:“center”,width:“100%”},
+chip:{padding:“7px 4px”,borderRadius:10,border:“1px solid rgba(255,255,255,0.2)”,background:”#1340b0”,color:”#fff”,fontSize:11,cursor:“pointer”,transition:“all .2s”,fontFamily:”‘Inter’,sans-serif”,whiteSpace:“nowrap”,fontWeight:500,flex:1,textAlign:“center”},
+chipOn:{background:”#FFD000”,color:”#1340b0”,border:“1px solid #FFD000”,fontWeight:700,flex:1,textAlign:“center”,fontSize:11},
+grid:{display:“grid”,gridTemplateColumns:“repeat(auto-fill,minmax(min(100%,255px),1fr))”,gap:12},
+card:{background:”#1340b0”,border:“1px solid rgba(255,255,255,0.2)”,borderRadius:14,padding:“12px 16px”,position:“relative”,display:“flex”,flexDirection:“column”,gap:4,transition:“all .2s”,opacity:0},
+tag:{position:“absolute”,top:10,right:10,fontSize:9,fontWeight:700,letterSpacing:.8,textTransform:“uppercase”,padding:“3px 8px”,borderRadius:6},
+cBrand:{fontSize:10,color:C.sub,textTransform:“uppercase”,letterSpacing:2},
+cName:{fontSize:14,fontWeight:700,color:”#fff”,lineHeight:1.2},
+cUnit:{fontSize:11,color:”#FFD000”,fontWeight:600},
+cDesc:{fontSize:11,color:C.sub,lineHeight:1.4,marginBottom:2},
+cBot:{display:“flex”,alignItems:“flex-end”,justifyContent:“space-between”,marginTop:“auto”},
+cPrice:{fontSize:18,fontWeight:800,color:”#fff”},
+cMin:{fontSize:9,color:C.sub,marginTop:1},
+addBtn:{background:”#fff”,border:“none”,borderRadius:8,color:”#1340b0”,fontWeight:700,fontSize:12,padding:“8px 12px”,cursor:“pointer”,fontFamily:”‘Inter’,sans-serif”},
+qC:{display:“flex”,alignItems:“center”,gap:8,background:“rgba(255,255,255,0.1)”,border:“1px solid rgba(255,255,255,0.25)”,borderRadius:8,padding:“6px 10px”},
+qB:{background:“transparent”,border:“none”,color:”#FFD000”,fontSize:18,cursor:“pointer”,fontWeight:700,lineHeight:1},
+qN:{fontSize:15,fontWeight:800,color:”#fff”,minWidth:22,textAlign:“center”},
+stLine:{display:“flex”,alignItems:“center”,gap:6,marginTop:4},
+stDot:{width:6,height:6,borderRadius:“50%”,flexShrink:0},
+stTxt:{fontSize:10,color:C.sub},
+cartBtn:{position:“relative”,background:“transparent”,border:“none”,padding:“8px 12px”,fontSize:32,cursor:“pointer”,lineHeight:1},
+badge:{position:“absolute”,top:-4,right:-4,background:”#FFD000”,color:”#1a56db”,borderRadius:“50%”,width:18,height:18,fontSize:10,fontWeight:900,display:“flex”,alignItems:“center”,justifyContent:“center”,border:“2px solid #1a56db”},
+formView:{maxWidth:820,margin:“0 auto”,width:“100%”},
+pageTitle:{fontSize:26,fontWeight:800,color:”#fff”,marginBottom:20,textAlign:“center”},
+finput:{width:“100%”,background:“rgba(255,255,255,0.1)”,border:“1px solid rgba(255,255,255,0.25)”,borderRadius:8,padding:“9px 10px”,color:”#fff”,fontSize:12,textAlign:“center”,transition:“border-color .2s”,textTransform:“uppercase”},
+primBtn:{display:“block”,width:“100%”,padding:“13px”,background:”#fff”,border:“none”,borderRadius:10,color:”#1340b0”,fontWeight:700,fontSize:15,cursor:“pointer”,fontFamily:”‘Inter’,sans-serif”,transition:“opacity .2s”},
+cartView:{maxWidth:720,margin:“0 auto”,width:“100%”},
+empty:{textAlign:“center”,padding:“70px 0”},
+ghostBtn:{marginTop:16,background:“rgba(255,255,255,0.1)”,border:“1px solid rgba(255,255,255,0.3)”,color:”#fff”,borderRadius:8,padding:“10px 22px”,cursor:“pointer”,fontSize:14,fontFamily:”‘Inter’,sans-serif”,fontWeight:600},
+ciList:{display:“flex”,flexDirection:“column”,gap:10,marginBottom:16},
+ci:{display:“flex”,gap:12,alignItems:“center”,background:”#1340b0”,border:“1px solid rgba(255,255,255,0.15)”,borderRadius:12,padding:14},
+ciName:{fontWeight:700,color:”#fff”,fontSize:14},
+ciMeta:{fontSize:11,color:C.sub,marginTop:3},
+ciRight:{display:“flex”,flexDirection:“column”,alignItems:“flex-end”,gap:7,flexShrink:0},
+ciTotal:{fontSize:16,fontWeight:800,color:”#FFD000”},
+rem:{background:“transparent”,border:“none”,color:C.red,fontSize:11,cursor:“pointer”,fontFamily:”‘Inter’,sans-serif”},
+clCard:{background:”#1340b0”,border:“1px solid rgba(255,255,255,0.2)”,borderRadius:12,padding:18,marginBottom:16},
+clCardTop:{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:12},
+clCardTitle:{fontSize:13,fontWeight:700,color:”#FFD000”},
+clGrid:{display:“flex”,flexDirection:“column”,gap:6},
+clRow:{display:“flex”,justifyContent:“space-between”,fontSize:12,paddingBottom:6,borderBottom:“1px solid rgba(255,255,255,0.1)”},
+clKey:{color:C.sub},
+clVal:{color:”#fff”,fontWeight:500,textAlign:“right”,maxWidth:“60%”},
+editBtn:{background:“rgba(255,255,255,0.1)”,border:“1px solid rgba(255,255,255,0.25)”,color:”#fff”,borderRadius:6,padding:“5px 12px”,cursor:“pointer”,fontSize:11,fontFamily:”‘Inter’,sans-serif”},
+warnBox:{background:“rgba(251,191,36,0.12)”,border:“1px solid rgba(251,191,36,0.35)”,borderRadius:10,padding:“14px 18px”,fontSize:13,color:”#fbbf24”,display:“flex”,alignItems:“center”,justifyContent:“space-between”,gap:12,flexWrap:“wrap”,marginBottom:16},
+warnBtn:{background:“rgba(255,255,255,0.1)”,border:“1px solid rgba(251,191,36,0.4)”,color:”#fbbf24”,borderRadius:8,padding:“6px 14px”,cursor:“pointer”,fontSize:13,fontFamily:”‘Inter’,sans-serif”,fontWeight:600},
+summ:{background:”#1340b0”,border:“1px solid rgba(255,255,255,0.15)”,borderRadius:12,padding:22},
+sRow:{display:“flex”,justifyContent:“space-between”,fontSize:15,marginBottom:12},
+sDivider:{height:1,background:“rgba(255,255,255,0.15)”,margin:“12px 0”},
+tip:{fontSize:12,color:”#fbbf24”,background:“rgba(251,191,36,0.1)”,borderRadius:8,padding:“8px 12px”,marginTop:10},
+confWrap:{display:“flex”,justifyContent:“center”,paddingTop:32},
+confBox:{textAlign:“center”,maxWidth:520,width:“100%”,background:”#1340b0”,border:“1px solid rgba(255,255,255,0.2)”,borderRadius:20,padding:“36px 30px”,boxShadow:“0 4px 32px rgba(0,0,0,.2)”},
+confCo:{fontSize:10,color:C.sub,letterSpacing:.5,textTransform:“uppercase”,marginTop:8,marginBottom:4},
+confTitle:{fontSize:24,fontWeight:800,color:”#fff”,margin:“6px 0 10px”,textTransform:“uppercase”},
+confTxt:{color:C.sub,fontSize:14,lineHeight:1.7,marginBottom:20},
+confDets:{background:“rgba(255,255,255,0.05)”,border:“1px solid rgba(255,255,255,0.15)”,borderRadius:10,padding:“14px 16px”,marginBottom:20,textAlign:“left”},
+confRow:{display:“flex”,justifyContent:“space-between”,paddingBottom:8,marginBottom:8,borderBottom:“1px solid rgba(255,255,255,0.08)”},
+sticky:{position:“fixed”,bottom:0,left:0,right:0,background:”#1340b0”,borderTop:“1px solid rgba(255,255,255,0.2)”,padding:“12px 16px”,display:“flex”,justifyContent:“space-between”,alignItems:“center”,zIndex:200,boxShadow:“0 -4px 20px rgba(0,0,0,.2)”},
+footer:{display:“flex”,alignItems:“center”,gap:10,justifyContent:“center”,padding:“20px 28px”,borderTop:“1px solid rgba(255,255,255,0.15)”,background:”#1340b0”},
+footTxt:{fontSize:13,color:C.sub},
+};
+
+```
+// Show app after compilation
+document.getElementById("loading").style.display = "none";
+document.getElementById("root").style.display = "block";
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+```
+
+  </script>
 </body>
 </html>
