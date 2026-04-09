@@ -501,6 +501,7 @@ async function handleLogin(){
 }
 
 async function handleRegister(){
+  try {
   var nome=document.getElementById("reg-nome").value.trim();
   var cnpj=document.getElementById("reg-cnpj").value.trim();
   var email=document.getElementById("reg-email").value.trim();
@@ -529,6 +530,12 @@ async function handleRegister(){
     document.getElementById("register-form").style.display="none";
   }catch(e){errEl.textContent="Erro ao cadastrar.";errEl.style.display="block";}
   hideLoading();
+  } catch(err) {
+    hideLoading();
+    document.getElementById("reg-err").textContent = "Erro: " + err.message;
+    document.getElementById("reg-err").style.display = "block";
+    console.error(err);
+  }
 }
 
 function goToApp(){document.getElementById("reg-success").style.display="none";showApp();}
