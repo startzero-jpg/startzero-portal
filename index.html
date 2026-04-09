@@ -126,7 +126,7 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
     <button class="btn-sm" id="btn-to-reg">N&#xE3;o tem conta? Cadastre-se</button>
   </div>
 
-  <div id="bx-reg" class="box hidden">
+  <div id="bx-reg" class="box" style="display:none">
     <div class="ttl">Novo Cadastro</div>
     <label class="lbl">Raz&#xE3;o Social *</label>
     <input type="text" id="r-nome" class="inp" placeholder="Farm&#xE1;cia Sa&#xFA;de Total Ltda."/>
@@ -379,14 +379,14 @@ function setupEyes(){
 // TAB SWITCH
 function setupAuthTabs(){
   document.getElementById("btn-to-reg").addEventListener("click",function(){
-    document.getElementById("bx-login").classList.add("hidden");
-    document.getElementById("bx-reg").classList.remove("hidden");
+    document.getElementById("bx-login").style.display="none";
+    document.getElementById("bx-reg").style.display="block";
     document.getElementById("l-err").style.display="none";
     document.getElementById("r-err").style.display="none";
   });
   document.getElementById("btn-to-login").addEventListener("click",function(){
-    document.getElementById("bx-reg").classList.add("hidden");
-    document.getElementById("bx-login").classList.remove("hidden");
+    document.getElementById("bx-reg").style.display="none";
+    document.getElementById("bx-login").style.display="block";
     document.getElementById("l-err").style.display="none";
     document.getElementById("r-err").style.display="none";
   });
