@@ -170,11 +170,11 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
     <label class="auth-label">Raz&#xE3;o Social *</label>
     <input type="text" id="reg-nome" class="auth-input" placeholder="Farm&#xE1;cia Sa&#xFA;de Total Ltda."/>
     <label class="auth-label">CNPJ</label>
-    <input type="text" id="reg-cnpj" class="auth-input" placeholder="00.000.000/0000-00" oninput="this.value=maskCnpj(this.value)" maxlength="18"/>
+    <input type="text" id="reg-cnpj" class="auth-input" placeholder="00.000.000/0000-00" oninput="this.value=maskCnpj(this.value)" onkeyup="this.value=maskCnpj(this.value)" maxlength="18"/>
     <label class="auth-label">E-mail *</label>
     <input type="email" id="reg-email" class="auth-input" placeholder="contato@farmacia.com.br" style="text-transform:lowercase"/>
     <label class="auth-label">WhatsApp *</label>
-    <input type="tel" id="reg-whatsapp" class="auth-input" placeholder="(00) 00000-0000" oninput="this.value=maskPhone(this.value)"/>
+    <input type="tel" id="reg-whatsapp" class="auth-input" placeholder="(00) 00000-0000" oninput="this.value=maskPhone(this.value)" onkeyup="this.value=maskPhone(this.value)" onchange="this.value=maskPhone(this.value)"/>
     <label class="auth-label">Senha *</label>
     <div class="pw-wrap">
       <input type="password" id="reg-senha" class="auth-input" placeholder="M&#xED;nimo 6 caracteres"/>
@@ -501,6 +501,9 @@ async function handleLogin(){
 }
 
 async function handleRegister(){
+  document.getElementById("reg-err").textContent = "Processando...";
+  document.getElementById("reg-err").style.display = "block";
+  document.getElementById("reg-err").style.color = "#FFD000";
   try {
   var nome=document.getElementById("reg-nome").value.trim();
   var cnpj=document.getElementById("reg-cnpj").value.trim();
