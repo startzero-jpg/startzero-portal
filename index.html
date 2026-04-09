@@ -156,7 +156,11 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
     </div>
     <div id="login-err" class="err-msg" style="display:none"></div>
     <button type="button" class="btn-primary" onclick="handleLogin()">Entrar &#x2192;</button>
-    <button type="button" class="btn-link" id="btn-go-register">N&#xE3;o tem conta? Cadastre-se</button>
+    <button type="button" class="btn-link" id="btn-go-register" onclick="
+  document.getElementById('login-form').style.display='none';
+  document.getElementById('register-form').style.display='block';
+  document.getElementById('login-err').style.display='none';
+">N&#xE3;o tem conta? Cadastre-se</button>
   </div>
 
   <!-- REGISTER -->
@@ -183,7 +187,11 @@ footer{display:flex;align-items:center;gap:8px;justify-content:center;padding:16
     </div>
     <div id="reg-err" class="err-msg" style="display:none"></div>
     <button type="button" class="btn-primary" onclick="handleRegister()">Salvar Cadastro</button>
-    <button type="button" class="btn-link" id="btn-go-login">J&#xE1; tem conta? Fazer Login</button>
+    <button type="button" class="btn-link" id="btn-go-login" onclick="
+  document.getElementById('register-form').style.display='none';
+  document.getElementById('login-form').style.display='block';
+  document.getElementById('reg-err').style.display='none';
+">J&#xE1; tem conta? Fazer Login</button>
   </div>
 </div>
 
@@ -856,18 +864,7 @@ mc.innerHTML=’<h2 style="font-size:22px;font-weight:800;text-align:center;marg
 
 // ── INIT ──
 window.addEventListener(“load”,function(){
-document.getElementById(“btn-go-register”).addEventListener(“click”,function(){
-document.getElementById(“login-form”).style.display=“none”;
-document.getElementById(“reg-err”).style.display=“none”;
-document.getElementById(“login-err”).style.display=“none”;
-document.getElementById(“register-form”).style.display=“block”;
-});
-document.getElementById(“btn-go-login”).addEventListener(“click”,function(){
-document.getElementById(“register-form”).style.display=“none”;
-document.getElementById(“reg-err”).style.display=“none”;
-document.getElementById(“login-err”).style.display=“none”;
-document.getElementById(“login-form”).style.display=“block”;
-});
+
 setLogos();
 document.getElementById(“sticky-logo”).src=LOGO;
 });
